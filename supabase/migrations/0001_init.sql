@@ -51,6 +51,14 @@ $$;
 
 grant execute on function public.is_admin() to anon, authenticated;
 
+-- RLS policies only narrow an existing grant, they don't create one — tables
+-- created via raw SQL (unlike the dashboard's Table Editor) get no baseline
+-- grant to anon/authenticated at all without this, and every query fails
+-- with "permission denied for table X" regardless of the policies below.
+grant select on public.regattas to anon, authenticated;
+grant insert, update on public.regattas to authenticated;
+grant select, insert on public.allowed_admins to authenticated;
+
 alter table public.regattas enable row level security;
 alter table public.allowed_admins enable row level security;
 
