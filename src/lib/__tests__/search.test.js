@@ -112,6 +112,41 @@ describe('disambiguated identity filtering', () => {
   })
 })
 
+describe('crew details attached to disambiguation candidates', () => {
+  it('records a crew for a name that appears in one multi-athlete boat', () => {
+    const { index } = setup()
+    const [emery] = findDisambiguationCandidates(index, 'Emery Gautihier')
+    expect(emery.crews).toHaveLength(1)
+    expect(emery.crews[0]).toMatchObject({ raceNumber: 2, boatType: 'K2' })
+    expect(emery.crews[0].athletes).toEqual([
+      { name: 'Emery Gautihier', club: 'ORCC' },
+      { name: 'Henry Trussler', club: 'ORCC' },
+    ])
+  })
+
+  it('merges crews from both a solo-adjacent and a mixed-crew appearance of the same athlete', () => {
+    const { index } = setup()
+    // Ben Cooper races a same-club 2-person boat (race 2, K2) and a mixed
+    // 4-person boat (race 3, C4) — both are genuine crews and both must show.
+    const [ben] = findDisambiguationCandidates(index, 'Ben Cooper')
+    expect(ben.crews.map((c) => c.boatType).sort()).toEqual(['C4', 'K2'])
+
+    const mixedCrew = ben.crews.find((c) => c.boatType === 'C4')
+    expect(mixedCrew.athletes).toEqual([
+      { name: 'Ben Cooper', club: 'ORCC/CPCC' },
+      { name: 'Maverick Lacelle', club: 'ORCC/CPCC' },
+      { name: 'Alex Chan', club: 'ORCC/CPCC' },
+      { name: 'Sam Lee', club: 'ORCC/CPCC' },
+    ])
+  })
+
+  it('returns an empty crew list for an athlete who only ever raced solo', () => {
+    const { index } = setup()
+    const candidates = findDisambiguationCandidates(index, 'John Smith')
+    expect(candidates.every((c) => c.crews.length === 0)).toBe(true)
+  })
+})
+
 describe('annotateEntries', () => {
   it('marks races and lanes as matched based on the active query', () => {
     const { entries, index } = setup()

@@ -1,5 +1,12 @@
 import Fuse from 'fuse.js'
 
+/** The boat class (K1, K4, C-15, ...) is the last word of the event name
+ * (e.g. "U14 Boys K4") — there's no separate parsed field for it. */
+function boatTypeFromEvent(event) {
+  const tokens = (event ?? '').trim().split(/\s+/).filter(Boolean)
+  return tokens.length ? tokens[tokens.length - 1] : ''
+}
+
 /**
  * Builds a fuzzy search index over every distinct athlete name that appears in
  * the schedule, plus a list of "identities" used only to power disambiguation.
@@ -10,6 +17,10 @@ import Fuse from 'fuse.js'
  * the full composite club string. Two identities are only genuinely ambiguous
  * (different people) if their club sets don't overlap at all — see
  * findDisambiguationCandidates, which merges variants that share a club.
+ *
+ * Each identity also collects the multi-athlete boats ("crews") it raced in,
+ * so the disambiguation UI can show a parent who else is in their kid's boat.
+ * Solo lanes aren't crews and are skipped.
  */
 export function buildSearchIndex(entries) {
   const nameSet = new Set()
@@ -19,10 +30,19 @@ export function buildSearchIndex(entries) {
     if (entry.type !== 'race') continue
     for (const lane of entry.lanes) {
       const clubLabel = lane.clubs.join('/')
+      const crew =
+        lane.names.length > 1
+          ? {
+              raceNumber: entry.raceNumber,
+              boatType: boatTypeFromEvent(entry.event),
+              athletes: lane.names.map((n) => ({ name: n, club: clubLabel })),
+            }
+          : null
       for (const name of lane.names) {
         nameSet.add(name)
         const key = `${name.toLowerCase()}||${clubLabel.toLowerCase()}`
-        if (!identityMap.has(key)) identityMap.set(key, { name, club: clubLabel })
+        if (!identityMap.has(key)) identityMap.set(key, { name, club: clubLabel, crews: [] })
+        if (crew) identityMap.get(key).crews.push(crew)
       }
     }
   }
@@ -106,8 +126,8 @@ export function laneMatchesIdentity(lane, identity) {
 /**
  * Returns distinct-athlete candidates worth disambiguating for the current
  * query. Variants of the same name that share a club are merged (same kid,
- * different boat mixes); only name-alikes with no club in common are surfaced
- * as separate people.
+ * different boat mixes, their crews combined); only name-alikes with no club
+ * in common are surfaced as separate people.
  */
 export function findDisambiguationCandidates(index, query) {
   const q = (query ?? '').trim()
@@ -143,13 +163,14 @@ export function findDisambiguationCandidates(index, query) {
             existing.originalClubs.push(club)
           }
         })
+        existing.crews.push(...variant.crews)
       } else {
-        groups.push({ name: variant.name, lowerClubs, originalClubs })
+        groups.push({ name: variant.name, lowerClubs, originalClubs, crews: [...variant.crews] })
       }
     }
     for (const g of groups) {
       const club = g.originalClubs.join('/')
-      candidates.push({ name: g.name, club, id: `${g.name.toLowerCase()}||${club.toLowerCase()}` })
+      candidates.push({ name: g.name, club, id: `${g.name.toLowerCase()}||${club.toLowerCase()}`, crews: g.crews })
     }
   }
 
