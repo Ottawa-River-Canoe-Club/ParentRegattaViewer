@@ -216,17 +216,17 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
 }
 
 /**
- * Parses the full regatta CSV export (schedule section + optional DRAWRESULTS
- * section) into an ordered list of race/break entries. Column positions are
- * detected from header text rather than assumed, since the sheet may or may not
- * have a leading blank column in either section.
+ * Parses the regatta's two source tabs — the schedule tab (Time/Race#/Event/
+ * Heat#/Distance) and the draw/results tab (repeating Event + LANE blocks) —
+ * into a single ordered list of race/break entries. The two tabs are fetched
+ * as separate CSV exports (see useRegattaData), so each is parsed on its own
+ * rather than split out of one combined document. Column positions are
+ * detected from header text rather than assumed, since the two tabs aren't
+ * even consistent with each other about a leading blank column.
  */
-export function parseRegattaCsv(csvText) {
-  const { data: rows } = Papa.parse(csvText, { skipEmptyLines: false })
-
-  const markerIdx = rows.findIndex((row) => row.some((cell) => normalizeKey(cell) === 'DRAWRESULTS'))
-  const scheduleRows = markerIdx === -1 ? rows : rows.slice(0, markerIdx)
-  const resultsRows = markerIdx === -1 ? [] : rows.slice(markerIdx + 1)
+export function parseRegattaData(scheduleCsvText, resultsCsvText) {
+  const { data: scheduleRows } = Papa.parse(scheduleCsvText ?? '', { skipEmptyLines: false })
+  const { data: resultsRows } = Papa.parse(resultsCsvText ?? '', { skipEmptyLines: false })
 
   const { scheduleMap, scheduleOrder, title } = parseScheduleSection(scheduleRows)
   const resultsMap = parseResultsSection(resultsRows)

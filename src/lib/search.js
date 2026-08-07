@@ -28,19 +28,48 @@ export function buildSearchIndex(entries) {
   }
 
   const names = [...nameSet]
-  const fuse = new Fuse(names, {
-    threshold: 0.32,
-    ignoreLocation: true,
+
+  // Indexed by individual word, not full name: fuzzy-matching whole "First
+  // Last" strings let a query like "Ben Cooper" also match an unrelated
+  // "Kenzie Cooper" who merely shares a surname. See getMatchedNameSet.
+  const tokenSet = new Set()
+  for (const name of names) {
+    name.split(/\s+/).filter(Boolean).forEach((token) => tokenSet.add(token))
+  }
+  const tokenFuse = new Fuse([...tokenSet], {
+    threshold: 0.3,
+    ignoreLocation: false,
     minMatchCharLength: 2,
   })
 
-  return { fuse, identities: [...identityMap.values()] }
+  return { tokenFuse, names, identities: [...identityMap.values()] }
 }
 
+/**
+ * Matches a query against the full-name corpus word-by-word: every word the
+ * parent typed must fuzzy-match some word in the athlete's name. A single
+ * word like "Zack" can still typo-match a first name like "Zach" on its own,
+ * but a two-word query like "Ben Cooper" won't also surface an unrelated
+ * "Kenzie Cooper" who only matches on the second word.
+ */
 export function getMatchedNameSet(index, query) {
   const q = (query ?? '').trim()
   if (q.length < 2) return new Set()
-  return new Set(index.fuse.search(q).map((r) => r.item.toLowerCase()))
+
+  const queryTokens = q.split(/\s+/).filter(Boolean)
+  const matchSetsByToken = queryTokens.map(
+    (token) => new Set(index.tokenFuse.search(token).map((r) => r.item.toLowerCase())),
+  )
+
+  const matched = index.names.filter((fullName) => {
+    const nameTokens = fullName
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((t) => t.toLowerCase())
+    return matchSetsByToken.every((matchSet) => nameTokens.some((nt) => matchSet.has(nt)))
+  })
+
+  return new Set(matched.map((n) => n.toLowerCase()))
 }
 
 function clubTextMatches(club, query) {

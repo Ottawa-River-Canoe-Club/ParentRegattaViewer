@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseRegattaCsv } from '../csvParser'
+import { parseRegattaData } from '../csvParser'
 import {
   buildSearchIndex,
   getMatchedNameSet,
@@ -8,10 +8,10 @@ import {
   laneMatchesIdentity,
   annotateEntries,
 } from '../search'
-import { WITH_RESULTS } from './fixtures'
+import { SCHEDULE_ONLY, RESULTS_ONLY } from './fixtures'
 
 function setup() {
-  const { entries } = parseRegattaCsv(WITH_RESULTS)
+  const { entries } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
   const index = buildSearchIndex(entries)
   return { entries, index }
 }
@@ -21,6 +21,22 @@ describe('fuzzy name search', () => {
     const { index } = setup()
     const matched = getMatchedNameSet(index, 'Zack')
     expect(matched.has('zach miller')).toBe(true)
+  })
+
+  it('does not match an unrelated athlete who only shares a surname', () => {
+    // Regression test: the live sheet has both a "Ben Cooper" and a "Kenzie
+    // Cooper" — searching the full name "Ben Cooper" must not also surface
+    // Kenzie Cooper just because the last word matches.
+    const { index } = setup()
+    const matched = getMatchedNameSet(index, 'Ben Cooper')
+    expect(matched.has('ben cooper')).toBe(true)
+    expect(matched.has('kenzie cooper')).toBe(false)
+  })
+
+  it('still tolerates a typo within a full name', () => {
+    const { index } = setup()
+    const matched = getMatchedNameSet(index, 'Ben Coper')
+    expect(matched.has('ben cooper')).toBe(true)
   })
 })
 

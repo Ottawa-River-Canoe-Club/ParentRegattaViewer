@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { parseRegattaCsv } from '../lib/csvParser'
+import { parseRegattaData } from '../lib/csvParser'
 import { loadCache, saveCache } from '../lib/cache'
 
-const CSV_URL =
-  'https://docs.google.com/spreadsheets/d/10sjjgYS5cEJladjNqQ0Z2tRqiTIvIES6/export?format=csv'
+const SHEET_ID = '10sjjgYS5cEJladjNqQ0Z2tRqiTIvIES6'
+const SCHEDULE_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`
+// The schedule and the draw/results live on two separate tabs of the same sheet —
+// a plain export without a gid only ever returns the first (schedule) tab.
+const RESULTS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1191136310`
+
 const POLL_INTERVAL_MS = 60_000
 const FETCH_TIMEOUT_MS = 15_000
+
+async function fetchCsv(url, signal) {
+  const res = await fetch(url, { signal, cache: 'no-store' })
+  if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
+
+  const text = await res.text()
+  if (/^\s*<(!doctype|html)/i.test(text)) {
+    throw new Error('Sheet did not return CSV — check that it is shared as "Anyone with the link"')
+  }
+  return text
+}
 
 export function useRegattaData() {
   const cachedRef = useRef(undefined)
@@ -25,15 +40,15 @@ export function useRegattaData() {
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
 
     try {
-      const res = await fetch(CSV_URL, { signal: controller.signal, cache: 'no-store' })
-      if (!res.ok) throw new Error(`Request failed with status ${res.status}`)
+      // Fetched together and merged only on full success — a half-updated view
+      // (new lane draws paired with stale times, or vice versa) would be worse
+      // than briefly-stale-but-consistent cached data.
+      const [scheduleText, resultsText] = await Promise.all([
+        fetchCsv(SCHEDULE_CSV_URL, controller.signal),
+        fetchCsv(RESULTS_CSV_URL, controller.signal),
+      ])
 
-      const text = await res.text()
-      if (/^\s*<(!doctype|html)/i.test(text)) {
-        throw new Error('Sheet did not return CSV — check that it is shared as "Anyone with the link"')
-      }
-
-      const parsed = parseRegattaCsv(text)
+      const parsed = parseRegattaData(scheduleText, resultsText)
       setData(parsed)
       setLastUpdated(parsed.parsedAt)
       setIsOffline(false)
