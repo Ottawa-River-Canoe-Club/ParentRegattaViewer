@@ -56,16 +56,20 @@ alter table public.allowed_admins enable row level security;
 
 -- regattas: anyone can browse the directory (including archived — the
 -- public directory has its own toggle for that); only admins can write.
+-- (drop-if-exists first so this whole file is safe to run more than once)
+drop policy if exists "Public can view regattas" on public.regattas;
 create policy "Public can view regattas"
   on public.regattas for select
   to anon, authenticated
   using (true);
 
+drop policy if exists "Admins can insert regattas" on public.regattas;
 create policy "Admins can insert regattas"
   on public.regattas for insert
   to authenticated
   with check (public.is_admin());
 
+drop policy if exists "Admins can update regattas" on public.regattas;
 create policy "Admins can update regattas"
   on public.regattas for update
   to authenticated
@@ -75,11 +79,13 @@ create policy "Admins can update regattas"
 -- allowed_admins: never publicly readable or writable — only existing
 -- admins can view or extend the list (checked via is_admin(), not a plain
 -- self-row policy, so the whole list can be shown in the Admin Portal).
+drop policy if exists "Admins can view allowed_admins" on public.allowed_admins;
 create policy "Admins can view allowed_admins"
   on public.allowed_admins for select
   to authenticated
   using (public.is_admin());
 
+drop policy if exists "Admins can add allowed_admins" on public.allowed_admins;
 create policy "Admins can add allowed_admins"
   on public.allowed_admins for insert
   to authenticated
