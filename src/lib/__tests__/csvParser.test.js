@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseRegattaData } from '../csvParser'
+import { laneMatchesClubs } from '../search'
 import { SCHEDULE_ONLY, RESULTS_ONLY } from './fixtures'
 
 describe('parseRegattaData — schedule tab (matches the real live sheet today)', () => {
@@ -70,5 +71,50 @@ describe('parseRegattaData — draw/results tab (separate CSV export, own gid)',
     expect(lane1.finish).toBe('1')
     expect(lane1.points).toBe('10')
     expect(lane1.time).toBe('2:15.3')
+  })
+})
+
+describe('parseRegattaData — unique club extraction', () => {
+  it('collects every distinct club, alphabetically, splitting interclub crews into their component clubs', () => {
+    const { clubs } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
+    // Race 3's lane is the compound "ORCC/CPCC" — it must contribute ORCC and
+    // CPCC individually, not a single "ORCC/CPCC" entry.
+    expect(clubs).toEqual(['CPCC', 'NBCC', 'ORCC'])
+  })
+
+  it('returns an empty list when there are no results yet', () => {
+    const { clubs } = parseRegattaData(SCHEDULE_ONLY, '')
+    expect(clubs).toEqual([])
+  })
+})
+
+describe('parseRegattaData — club alias normalization', () => {
+  // The results sheet shortens club codes to squeeze an interclub crew's CLUB
+  // cell under a character limit, e.g. "PCKC/OR/CP" instead of the full
+  // "PCKC/ORCC/CPCC".
+  const ALIASED_RESULTS = `Event,1,U12 MIXED C-15,FINAL,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,"Dale Reader, Amara Nanduri, Quinn McIntyre",PCKC/OR/CP,,,
+,2,Zach Miller,OR,,,
+`
+
+  it('expands shortened aliases to their canonical club code on each lane', () => {
+    const { entries } = parseRegattaData('', ALIASED_RESULTS)
+    const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+    expect(race1.lanes[0].clubs).toEqual(['PCKC', 'ORCC', 'CPCC'])
+    expect(race1.lanes[1].clubs).toEqual(['ORCC'])
+  })
+
+  it('collapses aliased and canonical spellings into one entry in the unique-club list', () => {
+    const { clubs } = parseRegattaData('', ALIASED_RESULTS)
+    expect(clubs).toEqual(['CPCC', 'ORCC', 'PCKC'])
+  })
+
+  it('lets the ORCC chip match a boat that was only ever written as "OR" in the sheet', () => {
+    const { entries } = parseRegattaData('', ALIASED_RESULTS)
+    const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+    expect(laneMatchesClubs(race1.lanes[0], new Set(['ORCC']))).toBe(true)
+    expect(laneMatchesClubs(race1.lanes[1], new Set(['ORCC']))).toBe(true)
   })
 })

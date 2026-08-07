@@ -72,20 +72,23 @@ export function getMatchedNameSet(index, query) {
   return new Set(matched.map((n) => n.toLowerCase()))
 }
 
-function clubTextMatches(club, query) {
-  const cl = (club ?? '').toLowerCase()
-  const q = (query ?? '').trim().toLowerCase()
-  if (!cl || !q) return false
-  return cl.includes(q) || q.includes(cl)
-}
-
-/** Boat-as-a-whole match: true if the query hits any crew member's name or any
- * club in a (possibly mixed) boat's club list. */
+/** Boat-as-a-whole match: true if the query fuzzy-matches any crew member's
+ * name. Club codes are never matched here — free-text substring matching on
+ * clubs used to let "ORCC" fuzzy-match a boat whose club was just "RCC"
+ * (since "orcc".includes("rcc")); club filtering now lives exclusively in
+ * laneMatchesClubs, which does an exact match instead. */
 export function laneMatchesQuery(lane, query, matchedNameSet) {
   const q = (query ?? '').trim()
   if (!q) return false
-  if (lane.clubs.some((c) => clubTextMatches(c, q))) return true
   return lane.names.some((n) => matchedNameSet.has(n.toLowerCase()))
+}
+
+/** Club-chip match: true only if one of the lane's (possibly interclub) club
+ * codes is an exact match for one of the selected clubs. Exact rather than
+ * fuzzy/substring so selecting "RCC" never matches an "ORCC" boat. */
+export function laneMatchesClubs(lane, selectedClubs) {
+  if (!selectedClubs || selectedClubs.size === 0) return false
+  return lane.clubs.some((club) => selectedClubs.has(club))
 }
 
 /** Precise match against a disambiguated identity: same name, and the boat
@@ -154,14 +157,27 @@ export function findDisambiguationCandidates(index, query) {
 }
 
 /** Annotates each race entry (and its lanes) with whether it matches the
- * current query or disambiguated identity, for filtering + highlighting. */
-export function annotateEntries(entries, { query, selectedIdentity, matchedNameSet }) {
+ * current filters, for filtering + highlighting. Name (free-text query or a
+ * disambiguated identity) and club (chip selection) are independent
+ * dimensions: with both active they must both match (intersect); with only
+ * one active, that one alone decides. */
+export function annotateEntries(entries, { query, selectedIdentity, matchedNameSet, selectedClubs }) {
+  const hasNameFilter = !!selectedIdentity || (query ?? '').trim() !== ''
+  const hasClubFilter = !!selectedClubs && selectedClubs.size > 0
+
   return entries.map((entry) => {
     if (entry.type !== 'race') return entry
     const lanes = entry.lanes.map((lane) => {
-      const matched = selectedIdentity
+      const nameMatched = selectedIdentity
         ? laneMatchesIdentity(lane, selectedIdentity)
         : laneMatchesQuery(lane, query, matchedNameSet)
+      const clubMatched = laneMatchesClubs(lane, selectedClubs)
+
+      let matched = false
+      if (hasNameFilter && hasClubFilter) matched = nameMatched && clubMatched
+      else if (hasNameFilter) matched = nameMatched
+      else if (hasClubFilter) matched = clubMatched
+
       return { ...lane, matched }
     })
     return { ...entry, lanes, matched: lanes.some((l) => l.matched) }

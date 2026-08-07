@@ -12,8 +12,8 @@ export function SearchBar({ value, onChange }) {
         spellCheck={false}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search athlete name or club code…"
-        aria-label="Search athlete name or club code"
+        placeholder="Search athlete name…"
+        aria-label="Search athlete name"
         className="h-14 w-full rounded-2xl border-2 border-slate-200 bg-white pl-12 pr-12 text-lg font-medium text-slate-900 placeholder:text-slate-400 focus:border-sky-600 focus:outline-none focus:ring-4 focus:ring-sky-100"
       />
       {value && (

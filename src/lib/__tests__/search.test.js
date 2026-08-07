@@ -5,6 +5,7 @@ import {
   getMatchedNameSet,
   findDisambiguationCandidates,
   laneMatchesQuery,
+  laneMatchesClubs,
   laneMatchesIdentity,
   annotateEntries,
 } from '../search'
@@ -58,16 +59,6 @@ describe('athlete disambiguation', () => {
 })
 
 describe('interclub / mixed-crew matching', () => {
-  it('matches a mixed ORCC/CPCC boat when searching for either club code', () => {
-    const { entries } = setup()
-    const race3 = entries.find((e) => e.type === 'race' && e.raceNumber === 3)
-    const lane = race3.lanes[0]
-    const { index } = setup()
-
-    expect(laneMatchesQuery(lane, 'CPCC', getMatchedNameSet(index, 'CPCC'))).toBe(true)
-    expect(laneMatchesQuery(lane, 'ORCC', getMatchedNameSet(index, 'ORCC'))).toBe(true)
-  })
-
   it('matches a mixed boat by any one crew member name', () => {
     const { entries, index } = setup()
     const race3 = entries.find((e) => e.type === 'race' && e.raceNumber === 3)
@@ -75,11 +66,36 @@ describe('interclub / mixed-crew matching', () => {
     expect(laneMatchesQuery(lane, 'Maverick', getMatchedNameSet(index, 'Maverick'))).toBe(true)
   })
 
-  it('does not cross-contaminate: searching CPCC only matches boats that actually include CPCC', () => {
+  it('text search never matches by club code — club codes are filtered separately', () => {
     const { entries, index } = setup()
-    const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
-    const orccOnlyLane = race1.lanes.find((l) => l.clubs.includes('ORCC') && !l.clubs.includes('CPCC'))
-    expect(laneMatchesQuery(orccOnlyLane, 'CPCC', getMatchedNameSet(index, 'CPCC'))).toBe(false)
+    const race3 = entries.find((e) => e.type === 'race' && e.raceNumber === 3)
+    const lane = race3.lanes[0] // ORCC/CPCC mixed boat
+    expect(laneMatchesQuery(lane, 'CPCC', getMatchedNameSet(index, 'CPCC'))).toBe(false)
+    expect(laneMatchesQuery(lane, 'ORCC', getMatchedNameSet(index, 'ORCC'))).toBe(false)
+  })
+})
+
+describe('laneMatchesClubs — exact club-chip filtering (fixes ORCC/RCC substring bug)', () => {
+  it('does not match "RCC" against a boat whose club is "ORCC"', () => {
+    const lane = { clubs: ['ORCC'] }
+    expect(laneMatchesClubs(lane, new Set(['RCC']))).toBe(false)
+  })
+
+  it('matches an exact club code', () => {
+    const lane = { clubs: ['ORCC'] }
+    expect(laneMatchesClubs(lane, new Set(['ORCC']))).toBe(true)
+  })
+
+  it('matches an interclub boat against either of its component clubs, but not an absent one', () => {
+    const lane = { clubs: ['ORCC', 'CPCC'] }
+    expect(laneMatchesClubs(lane, new Set(['ORCC']))).toBe(true)
+    expect(laneMatchesClubs(lane, new Set(['CPCC']))).toBe(true)
+    expect(laneMatchesClubs(lane, new Set(['NBCC']))).toBe(false)
+  })
+
+  it('returns false when no club is selected', () => {
+    const lane = { clubs: ['ORCC'] }
+    expect(laneMatchesClubs(lane, new Set())).toBe(false)
   })
 })
 
@@ -109,5 +125,55 @@ describe('annotateEntries', () => {
     expect(race2.matched).toBe(true)
     expect(race3.matched).toBe(true)
     expect(race1.matched).toBe(false)
+  })
+
+  it('a club filter alone (no text query) filters races without needing a name match', () => {
+    const { entries } = setup()
+    const annotated = annotateEntries(entries, {
+      query: '',
+      selectedIdentity: null,
+      matchedNameSet: new Set(),
+      selectedClubs: new Set(['NBCC']),
+    })
+
+    const race4 = annotated.find((e) => e.type === 'race' && e.raceNumber === 4) // Kenzie Cooper, NBCC
+    const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1) // ORCC/CPCC only
+
+    expect(race4.matched).toBe(true)
+    expect(race1.matched).toBe(false)
+  })
+
+  it('intersects an active name query with an active club filter', () => {
+    const { entries, index } = setup()
+    const matchedNameSet = getMatchedNameSet(index, 'Ben Cooper')
+    // Ben Cooper's boats (races 2 and 3) are all ORCC or ORCC/CPCC — never NBCC.
+    const annotated = annotateEntries(entries, {
+      query: 'Ben Cooper',
+      selectedIdentity: null,
+      matchedNameSet,
+      selectedClubs: new Set(['NBCC']),
+    })
+
+    const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2)
+    const race3 = annotated.find((e) => e.type === 'race' && e.raceNumber === 3)
+
+    expect(race2.matched).toBe(false)
+    expect(race3.matched).toBe(false)
+  })
+
+  it('a name query for "Zach" combined with the ORCC club chip only matches Zachs from ORCC', () => {
+    const { entries, index } = setup()
+    const matchedNameSet = getMatchedNameSet(index, 'Zach')
+    const annotated = annotateEntries(entries, {
+      query: 'Zach',
+      selectedIdentity: null,
+      matchedNameSet,
+      selectedClubs: new Set(['ORCC']),
+    })
+
+    const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1)
+    const zachLane = race1.lanes.find((l) => l.names.includes('Zach Miller'))
+    expect(zachLane.matched).toBe(true)
+    expect(race1.matched).toBe(true)
   })
 })

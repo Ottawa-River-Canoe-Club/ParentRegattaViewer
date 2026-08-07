@@ -34,6 +34,22 @@ function normalizeHeat(value) {
   return v
 }
 
+// The results sheet sometimes shortens club codes to fit an interclub crew's
+// CLUB cell within its character limit (e.g. "PCKC/OR/CP" rather than
+// "PCKC/ORCC/CPCC"). Map each shortened alias to its canonical code so those
+// crews are recognized as the same club as everyone else's, both in the
+// unique-club list and in each lane's own club data.
+const CLUB_ALIASES = {
+  OR: 'ORCC',
+  CP: 'CPCC',
+  SL: 'SLCC',
+}
+
+function normalizeClub(club) {
+  const trimmed = normalize(club)
+  return CLUB_ALIASES[trimmed] ?? trimmed
+}
+
 /** Maps field names to column indexes by matching header text, so leading blank
  * columns or reordered columns don't break parsing (only positional offsets would). */
 function findColumnMap(headerRow, aliasesByField) {
@@ -152,7 +168,7 @@ function parseResultsSection(rows) {
         .filter(Boolean)
       const clubs = clubCell
         .split('/')
-        .map((s) => s.trim())
+        .map((s) => normalizeClub(s))
         .filter(Boolean)
 
       current.lanes.push({ laneNumber, names, clubs, time: timeCell, finish: finishCell, points: pointsCell })
@@ -215,6 +231,31 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
   return entries
 }
 
+/** Collects every individual club code referenced across all lanes, sorted
+ * alphabetically, for the dedicated club-filter UI. Interclub crews (CLUB =
+ * "ORCC/CPCC") are split on "/" so each component club becomes its own entry
+ * rather than one compound one — otherwise the filter chips couldn't
+ * distinguish a boat's clubs from each other, and a chip for "ORCC" wouldn't
+ * find boats where ORCC is only part of a mixed crew. Each piece also passes
+ * through normalizeClub so a shortened alias (e.g. "OR") collapses into the
+ * same chip as its canonical code ("ORCC") rather than getting its own. */
+function extractUniqueClubs(entries) {
+  const clubSet = new Set()
+  for (const entry of entries) {
+    if (entry.type !== 'race') continue
+    for (const lane of entry.lanes) {
+      for (const rawClub of lane.clubs) {
+        rawClub
+          .split('/')
+          .map((c) => normalizeClub(c))
+          .filter(Boolean)
+          .forEach((c) => clubSet.add(c))
+      }
+    }
+  }
+  return [...clubSet].sort((a, b) => a.localeCompare(b))
+}
+
 /**
  * Parses the regatta's two source tabs — the schedule tab (Time/Race#/Event/
  * Heat#/Distance) and the draw/results tab (repeating Event + LANE blocks) —
@@ -231,6 +272,7 @@ export function parseRegattaData(scheduleCsvText, resultsCsvText) {
   const { scheduleMap, scheduleOrder, title } = parseScheduleSection(scheduleRows)
   const resultsMap = parseResultsSection(resultsRows)
   const entries = mergeSections(scheduleOrder, scheduleMap, resultsMap)
+  const clubs = extractUniqueClubs(entries)
 
-  return { title, entries, parsedAt: Date.now() }
+  return { title, entries, parsedAt: Date.now(), clubs }
 }

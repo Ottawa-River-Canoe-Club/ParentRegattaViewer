@@ -7,6 +7,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { buildSearchIndex, getMatchedNameSet, findDisambiguationCandidates, annotateEntries } from '../lib/search'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
+import { ClubFilterChips } from '../components/ClubFilterChips'
 import { FilterChips } from '../components/FilterChips'
 import { DisambiguationPrompt } from '../components/DisambiguationPrompt'
 import { RaceCard } from '../components/RaceCard'
@@ -32,26 +33,39 @@ function RegattaDashboardForId({ regattaId }) {
   const [searchInput, setSearchInput] = useState('')
   const [filterMode, setFilterMode] = useState('all')
   const [selectedIdentity, setSelectedIdentity] = useState(null)
+  const [selectedClubs, setSelectedClubs] = useState(() => new Set())
   const debouncedQuery = useDebouncedValue(searchInput, 150)
-  const wasQueryEmptyRef = useRef(true)
+  const wasFilterEmptyRef = useRef(true)
 
   const handleSearchChange = (value) => {
     setSearchInput(value)
     setSelectedIdentity(null)
   }
 
-  const hasActiveQuery = debouncedQuery.trim() !== '' || !!selectedIdentity
+  const toggleClub = (club) => {
+    setSelectedClubs((prev) => {
+      const next = new Set(prev)
+      if (next.has(club)) next.delete(club)
+      else next.add(club)
+      return next
+    })
+  }
 
-  // Typing a search instantly filters (per spec); jumping back to "All Races"
-  // manually is still respected once the user does it themselves.
+  const hasActiveClubFilter = selectedClubs.size > 0
+  const hasActiveFilter = debouncedQuery.trim() !== '' || !!selectedIdentity || hasActiveClubFilter
+
+  // Typing a search or tapping a club chip instantly filters (per spec);
+  // jumping back to "All Races" manually is still respected once the user
+  // does it themselves.
   useEffect(() => {
-    const isEmpty = debouncedQuery.trim() === ''
-    if (wasQueryEmptyRef.current && !isEmpty && filterMode === 'all') setFilterMode('filtered')
-    if (!wasQueryEmptyRef.current && isEmpty && filterMode === 'filtered') setFilterMode('all')
-    wasQueryEmptyRef.current = isEmpty
-  }, [debouncedQuery, filterMode])
+    const isEmpty = !hasActiveFilter
+    if (wasFilterEmptyRef.current && !isEmpty && filterMode === 'all') setFilterMode('filtered')
+    if (!wasFilterEmptyRef.current && isEmpty && filterMode === 'filtered') setFilterMode('all')
+    wasFilterEmptyRef.current = isEmpty
+  }, [hasActiveFilter, filterMode])
 
   const entries = data?.entries ?? null
+  const clubs = data?.clubs ?? []
 
   const searchIndex = useMemo(() => buildSearchIndex(entries ?? []), [entries])
   const matchedNameSet = useMemo(() => getMatchedNameSet(searchIndex, debouncedQuery), [searchIndex, debouncedQuery])
@@ -62,8 +76,8 @@ function RegattaDashboardForId({ regattaId }) {
 
   const annotatedEntries = useMemo(() => {
     if (!entries) return null
-    return annotateEntries(entries, { query: debouncedQuery, selectedIdentity, matchedNameSet })
-  }, [entries, debouncedQuery, selectedIdentity, matchedNameSet])
+    return annotateEntries(entries, { query: debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs })
+  }, [entries, debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs])
 
   const counts = useMemo(() => {
     if (!annotatedEntries) return { all: 0, filtered: 0, live: 0 }
@@ -79,17 +93,27 @@ function RegattaDashboardForId({ regattaId }) {
     if (!annotatedEntries) return []
     if (filterMode === 'filtered') return annotatedEntries.filter((e) => e.type === 'race' && e.matched)
     if (filterMode === 'live') {
-      return annotatedEntries.filter((e) => e.type === 'race' && e.hasResults && (!hasActiveQuery || e.matched))
+      return annotatedEntries.filter((e) => e.type === 'race' && e.hasResults && (!hasActiveFilter || e.matched))
     }
     return annotatedEntries
-  }, [annotatedEntries, filterMode, hasActiveQuery])
+  }, [annotatedEntries, filterMode, hasActiveFilter])
 
   let emptyState = null
   if (annotatedEntries && visibleEntries.length === 0) {
-    if (filterMode === 'filtered' && !hasActiveQuery) {
-      emptyState = { title: 'Type a name or club to filter', message: 'Try an athlete name or a club code like ORCC.' }
+    if (filterMode === 'filtered' && !hasActiveFilter) {
+      emptyState = { title: 'Type a name or tap a club to filter', message: 'Try an athlete name or select a club below.' }
     } else if (filterMode === 'filtered') {
-      emptyState = { title: `No races found`, message: `Nobody matching "${searchInput}" is in today's schedule.` }
+      const clubList = [...selectedClubs].join(', ')
+      if (searchInput.trim() && hasActiveClubFilter) {
+        emptyState = {
+          title: 'No races found',
+          message: `Nobody matching "${searchInput}" from ${clubList} is in today's schedule.`,
+        }
+      } else if (hasActiveClubFilter) {
+        emptyState = { title: 'No races found', message: `No one from ${clubList} is in today's schedule.` }
+      } else {
+        emptyState = { title: 'No races found', message: `Nobody matching "${searchInput}" is in today's schedule.` }
+      }
     } else if (filterMode === 'live') {
       emptyState = { title: 'No results posted yet', message: 'Finished races will show up here as they come in.' }
     } else {
@@ -127,6 +151,7 @@ function RegattaDashboardForId({ regattaId }) {
         />
         <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-100/95 p-3 backdrop-blur">
           <SearchBar value={searchInput} onChange={handleSearchChange} />
+          <ClubFilterChips clubs={clubs} selectedClubs={selectedClubs} onToggle={toggleClub} />
           <FilterChips mode={filterMode} onChange={setFilterMode} counts={counts} />
           <DisambiguationPrompt
             candidates={disambiguationCandidates}
