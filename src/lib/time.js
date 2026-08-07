@@ -14,6 +14,20 @@ export function formatRaceTime(raw) {
   return `${hours}:${minutes} ${period}`
 }
 
+/** Formats a plain "YYYY-MM-DD" date (as Postgres `date` columns serialize)
+ * for display. Builds the Date from its parts rather than parsing the string
+ * directly — `new Date("2026-08-15")` parses as UTC midnight, which renders
+ * as the previous day in any timezone west of UTC. */
+export function formatDate(isoDate) {
+  const value = (isoDate ?? '').toString().trim()
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return value
+
+  const [, year, month, day] = match.map(Number)
+  const date = new Date(year, month - 1, day)
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
 export function formatRelativeTime(timestamp) {
   if (!timestamp) return ''
   const diffMs = Date.now() - timestamp

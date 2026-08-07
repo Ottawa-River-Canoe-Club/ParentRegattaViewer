@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { parseRegattaData } from '../lib/csvParser'
 import { loadCache, saveCache } from '../lib/cache'
-
-const SHEET_ID = '10sjjgYS5cEJladjNqQ0Z2tRqiTIvIES6'
-const SCHEDULE_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`
-// The schedule and the draw/results live on two separate tabs of the same sheet —
-// a plain export without a gid only ever returns the first (schedule) tab.
-const RESULTS_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1191136310`
+import { buildScheduleCsvUrl, buildResultsCsvUrl } from '../lib/googleSheets'
 
 const POLL_INTERVAL_MS = 60_000
 const FETCH_TIMEOUT_MS = 15_000
@@ -22,9 +17,15 @@ async function fetchCsv(url, signal) {
   return text
 }
 
-export function useRegattaData() {
+/**
+ * Fetches and polls a single regatta's schedule + results CSVs. Callers must
+ * remount this hook (e.g. via a `key={regattaId}` on the route element) when
+ * switching regattas — it assumes regattaId/sheetId/resultsGid are stable for
+ * its whole mounted lifetime, so cached data never leaks between regattas.
+ */
+export function useRegattaData(regattaId, sheetId, resultsGid) {
   const cachedRef = useRef(undefined)
-  if (cachedRef.current === undefined) cachedRef.current = loadCache()
+  if (cachedRef.current === undefined) cachedRef.current = loadCache(regattaId)
   const cached = cachedRef.current
 
   const [data, setData] = useState(cached?.parsed ?? null)
@@ -35,6 +36,7 @@ export function useRegattaData() {
   const [error, setError] = useState(null)
 
   const fetchAndParse = useCallback(async () => {
+    if (!sheetId) return
     setIsRefreshing(true)
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -44,8 +46,8 @@ export function useRegattaData() {
       // (new lane draws paired with stale times, or vice versa) would be worse
       // than briefly-stale-but-consistent cached data.
       const [scheduleText, resultsText] = await Promise.all([
-        fetchCsv(SCHEDULE_CSV_URL, controller.signal),
-        fetchCsv(RESULTS_CSV_URL, controller.signal),
+        fetchCsv(buildScheduleCsvUrl(sheetId), controller.signal),
+        fetchCsv(buildResultsCsvUrl(sheetId, resultsGid), controller.signal),
       ])
 
       const parsed = parseRegattaData(scheduleText, resultsText)
@@ -53,7 +55,7 @@ export function useRegattaData() {
       setLastUpdated(parsed.parsedAt)
       setIsOffline(false)
       setError(null)
-      saveCache({ parsed })
+      saveCache(regattaId, { parsed })
     } catch (err) {
       setIsOffline(true)
       setError(err?.message || 'Failed to fetch the latest schedule')
@@ -62,13 +64,14 @@ export function useRegattaData() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [])
+  }, [regattaId, sheetId, resultsGid])
 
   useEffect(() => {
+    if (!sheetId) return
     fetchAndParse()
     const id = setInterval(fetchAndParse, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [fetchAndParse])
+  }, [fetchAndParse, sheetId])
 
   return { data, lastUpdated, isLoading, isRefreshing, isOffline, error, refresh: fetchAndParse }
 }
