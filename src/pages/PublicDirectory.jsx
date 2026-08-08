@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { Sailboat, RefreshCw, AlertTriangle, Archive } from 'lucide-react'
+import { Link } from 'react-router'
+import { Sailboat, RefreshCw, AlertTriangle, Archive, ShieldCheck } from 'lucide-react'
 import { useRegattaList } from '../hooks/useRegattaList'
 import { RegattaListItem } from '../components/RegattaListItem'
 import { EmptyState } from '../components/EmptyState'
@@ -17,12 +18,21 @@ export function PublicDirectory() {
   return (
     <div className="min-h-svh bg-slate-100 pb-10">
       <div className="bg-sky-800 px-4 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-6 text-white">
-        <div className="mx-auto flex max-w-xl items-center gap-3">
-          <Sailboat className="h-8 w-8" />
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-sky-200">RegattaParent</p>
-            <h1 className="text-xl font-bold leading-tight">Regattas</h1>
+        <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Sailboat className="h-8 w-8" />
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-sky-200">RegattaParent</p>
+              <h1 className="text-xl font-bold leading-tight">Regattas</h1>
+            </div>
           </div>
+          <Link
+            to="/admin"
+            aria-label="Admin portal"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
+          >
+            <ShieldCheck className="h-5 w-5" />
+          </Link>
         </div>
       </div>
 

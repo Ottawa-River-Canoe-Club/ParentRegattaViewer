@@ -1,5 +1,5 @@
 import { Link } from 'react-router'
-import { ChevronLeft, RefreshCw, WifiOff } from 'lucide-react'
+import { ChevronLeft, RefreshCw, ShieldCheck, WifiOff } from 'lucide-react'
 import { formatRelativeTime } from '../lib/time'
 
 export function StatusHeader({ title, lastUpdated, isOffline, isRefreshing, onRefresh }) {
@@ -19,15 +19,24 @@ export function StatusHeader({ title, lastUpdated, isOffline, isRefreshing, onRe
             <h1 className="truncate text-lg font-bold leading-tight">{title || 'Live Regatta Schedule'}</h1>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          aria-label="Refresh data"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/10 active:bg-white/20 disabled:opacity-60"
-        >
-          <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            to="/admin"
+            aria-label="Admin portal"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 active:bg-white/20"
+          >
+            <ShieldCheck className="h-5 w-5" />
+          </Link>
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="Refresh data"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 active:bg-white/20 disabled:opacity-60"
+          >
+            <RefreshCw className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       <div className="mt-1 flex items-center gap-2 text-xs font-medium text-sky-200">
