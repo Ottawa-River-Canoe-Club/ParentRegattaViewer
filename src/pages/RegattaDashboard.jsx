@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import { useRegattaMeta } from '../hooks/useRegattaMeta'
 import { useRegattaData } from '../hooks/useRegattaData'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
@@ -34,6 +34,7 @@ function RegattaDashboardForId({ regattaId }) {
   const [filterMode, setFilterMode] = useState('all')
   const [selectedIdentity, setSelectedIdentity] = useState(null)
   const [selectedClubs, setSelectedClubs] = useState(() => new Set())
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const debouncedQuery = useDebouncedValue(searchInput, 150)
   const wasFilterEmptyRef = useRef(true)
 
@@ -73,6 +74,10 @@ function RegattaDashboardForId({ regattaId }) {
     () => findDisambiguationCandidates(searchIndex, debouncedQuery),
     [searchIndex, debouncedQuery],
   )
+  // So a parent who collapsed the panel can still tell there's something in
+  // it worth reopening for — a club filter still narrowing results, or a
+  // name match still waiting to be disambiguated.
+  const hasHiddenFilterState = hasActiveClubFilter || disambiguationCandidates.length >= 2
 
   const annotatedEntries = useMemo(() => {
     if (!entries) return null
@@ -151,14 +156,35 @@ function RegattaDashboardForId({ regattaId }) {
         />
         <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-100/95 p-3 backdrop-blur">
           <SearchBar value={searchInput} onChange={handleSearchChange} />
-          <ClubFilterChips clubs={clubs} selectedClubs={selectedClubs} onToggle={toggleClub} />
-          <FilterChips mode={filterMode} onChange={setFilterMode} counts={counts} />
-          <DisambiguationPrompt
-            candidates={disambiguationCandidates}
-            selectedIdentity={selectedIdentity}
-            onSelect={setSelectedIdentity}
-            onClear={() => setSelectedIdentity(null)}
-          />
+          <button
+            type="button"
+            aria-expanded={filtersExpanded}
+            onClick={() => setFiltersExpanded((v) => !v)}
+            className="flex h-10 shrink-0 items-center justify-between rounded-xl border-2 border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 active:bg-slate-50"
+          >
+            <span className="flex items-center gap-1.5">
+              <SlidersHorizontal className="h-4 w-4" />
+              Filters &amp; suggestions
+              {!filtersExpanded && hasHiddenFilterState && (
+                <span className="h-2 w-2 rounded-full bg-sky-500" aria-hidden="true" />
+              )}
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 transition-transform duration-200 ${filtersExpanded ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {filtersExpanded && (
+            <>
+              <ClubFilterChips clubs={clubs} selectedClubs={selectedClubs} onToggle={toggleClub} />
+              <FilterChips mode={filterMode} onChange={setFilterMode} counts={counts} />
+              <DisambiguationPrompt
+                candidates={disambiguationCandidates}
+                selectedIdentity={selectedIdentity}
+                onSelect={setSelectedIdentity}
+                onClear={() => setSelectedIdentity(null)}
+              />
+            </>
+          )}
         </div>
       </div>
 
