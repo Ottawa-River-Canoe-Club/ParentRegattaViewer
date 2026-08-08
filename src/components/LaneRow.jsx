@@ -39,15 +39,13 @@ export function LaneRow({ lane, showResults }) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          {lane.matched && <Star className="h-4 w-4 shrink-0 fill-sky-500 text-sky-500" />}
-          <p className={`truncate text-base font-semibold ${lane.matched ? 'text-sky-900' : 'text-slate-900'}`}>
+        <div className="flex items-start gap-1.5">
+          {lane.matched && <Star className="mt-0.5 h-4 w-4 shrink-0 fill-sky-500 text-sky-500" />}
+          <p className={`text-base font-semibold ${lane.matched ? 'text-sky-900' : 'text-slate-900'}`}>
             {formatNames(lane.names) || 'TBD'}
           </p>
         </div>
-        {lane.clubs.length > 0 && (
-          <p className="truncate text-sm font-medium text-slate-500">{formatClubs(lane.clubs)}</p>
-        )}
+        {lane.clubs.length > 0 && <p className="text-sm font-medium text-slate-500">{formatClubs(lane.clubs)}</p>}
       </div>
 
       {showResults && (
