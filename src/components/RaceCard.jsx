@@ -27,6 +27,7 @@ export function RaceCard({ race }) {
 
   return (
     <div
+      id={`race-${race.raceNumber}`}
       className={`rounded-2xl border-2 bg-white p-4 shadow-sm ${
         race.matched ? 'border-sky-300 ring-2 ring-sky-100' : 'border-slate-200'
       }`}
@@ -53,7 +54,7 @@ export function RaceCard({ race }) {
       </div>
 
       {lanes.length > 0 ? (
-        <ul className="flex flex-col gap-1.5">
+        <ul className="flex flex-col gap-1 md:gap-1.5">
           {lanes.map((lane, idx) => (
             <LaneRow key={`${lane.laneNumber}-${idx}`} lane={lane} showResults={race.hasResults} />
           ))}

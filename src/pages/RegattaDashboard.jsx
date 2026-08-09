@@ -5,6 +5,7 @@ import { useRegattaMeta } from '../hooks/useRegattaMeta'
 import { useRegattaData } from '../hooks/useRegattaData'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { buildSearchIndex, getMatchedNameSet, findDisambiguationCandidates, annotateEntries } from '../lib/search'
+import { findCurrentRaceNumber } from '../lib/currentRace'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
 import { ClubFilterChips } from '../components/ClubFilterChips'
@@ -37,6 +38,8 @@ function RegattaDashboardForId({ regattaId }) {
   const [filtersExpanded, setFiltersExpanded] = useState(true)
   const debouncedQuery = useDebouncedValue(searchInput, 150)
   const wasFilterEmptyRef = useRef(true)
+  const stickyHeaderRef = useRef(null)
+  const hasScrolledToActiveRaceRef = useRef(false)
 
   const handleSearchChange = (value) => {
     setSearchInput(value)
@@ -64,6 +67,27 @@ function RegattaDashboardForId({ regattaId }) {
     if (!wasFilterEmptyRef.current && isEmpty && filterMode === 'filtered') setFilterMode('all')
     wasFilterEmptyRef.current = isEmpty
   }, [hasActiveFilter, filterMode])
+
+  // Jump straight to the active race on first load instead of leaving the
+  // parent to scroll past everything already finished. Runs exactly once —
+  // guarded by a ref rather than state so it can't re-fire and fight a
+  // parent who has since scrolled away on their own.
+  useEffect(() => {
+    if (hasScrolledToActiveRaceRef.current || isLoading || !data) return
+    hasScrolledToActiveRaceRef.current = true
+
+    const targetRaceNumber = findCurrentRaceNumber(data.entries)
+    if (targetRaceNumber == null) return
+    const element = document.getElementById(`race-${targetRaceNumber}`)
+    if (!element) return
+
+    element.scrollIntoView({ behavior: 'auto', block: 'start' })
+    // The header is sticky, not static, so block: 'start' alone would land
+    // the card right underneath it; pull back up by however tall the header
+    // actually rendered (search bar + filters expanded or not).
+    const headerHeight = stickyHeaderRef.current?.offsetHeight ?? 0
+    if (headerHeight) window.scrollBy(0, -headerHeight)
+  }, [isLoading, data])
 
   const entries = data?.entries ?? null
   const clubs = data?.clubs ?? []
@@ -146,7 +170,7 @@ function RegattaDashboardForId({ regattaId }) {
 
   return (
     <div className="min-h-svh bg-slate-100 pb-10">
-      <div className="sticky top-0 z-20 shadow-md">
+      <div ref={stickyHeaderRef} className="sticky top-0 z-20 shadow-md">
         <StatusHeader
           title={regatta?.name || data?.title}
           lastUpdated={lastUpdated}
