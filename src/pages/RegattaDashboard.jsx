@@ -6,6 +6,7 @@ import { useRegattaData } from '../hooks/useRegattaData'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { buildSearchIndex, getMatchedNameSet, findDisambiguationCandidates, annotateEntries } from '../lib/search'
 import { findCurrentRaceNumber } from '../lib/currentRace'
+import { buildOverallRankings } from '../lib/rankings'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
 import { ClubFilterChips } from '../components/ClubFilterChips'
@@ -14,6 +15,7 @@ import { DisambiguationPrompt } from '../components/DisambiguationPrompt'
 import { RaceCard } from '../components/RaceCard'
 import { BreakDivider } from '../components/BreakDivider'
 import { EmptyState } from '../components/EmptyState'
+import { OverallRankings } from '../components/OverallRankings'
 
 // Wrapper keyed by :id so switching between two different regattas fully
 // remounts the dashboard below — otherwise React would reuse the same
@@ -108,14 +110,20 @@ function RegattaDashboardForId({ regattaId }) {
     return annotateEntries(entries, { query: debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs })
   }, [entries, debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs])
 
+  // Independent of search/club filters by design — the whole point of this
+  // tab is to show the full qualification picture across all heats, not a
+  // subset of it.
+  const rankingGroups = useMemo(() => buildOverallRankings(entries ?? []), [entries])
+
   const counts = useMemo(() => {
-    if (!annotatedEntries) return { all: 0, filtered: 0 }
+    if (!annotatedEntries) return { all: 0, filtered: 0, rankings: 0 }
     const races = annotatedEntries.filter((e) => e.type === 'race')
     return {
       all: races.length,
       filtered: races.filter((r) => r.matched).length,
+      rankings: rankingGroups.length,
     }
-  }, [annotatedEntries])
+  }, [annotatedEntries, rankingGroups])
 
   const visibleEntries = useMemo(() => {
     if (!annotatedEntries) return []
@@ -231,7 +239,16 @@ function RegattaDashboardForId({ regattaId }) {
 
         {!isLoading &&
           data &&
-          (emptyState ? (
+          (filterMode === 'rankings' ? (
+            rankingGroups.length === 0 ? (
+              <EmptyState
+                title="No rankings yet"
+                message="Overall rankings will appear here once heats start finishing."
+              />
+            ) : (
+              <OverallRankings groups={rankingGroups} />
+            )
+          ) : emptyState ? (
             <EmptyState title={emptyState.title} message={emptyState.message} />
           ) : (
             visibleEntries.map((entry, idx) =>

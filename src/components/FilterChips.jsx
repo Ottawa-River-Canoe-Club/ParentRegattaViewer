@@ -1,6 +1,7 @@
 const OPTIONS = [
   { key: 'all', label: 'All Races' },
   { key: 'filtered', label: 'Filtered Results' },
+  { key: 'rankings', label: 'Overall Rankings' },
 ]
 
 export function FilterChips({ mode, onChange, counts }) {
