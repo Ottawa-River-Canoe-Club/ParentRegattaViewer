@@ -16,6 +16,7 @@ import { RaceCard } from '../components/RaceCard'
 import { BreakDivider } from '../components/BreakDivider'
 import { EmptyState } from '../components/EmptyState'
 import { OverallRankings } from '../components/OverallRankings'
+import { DayToggle } from '../components/DayToggle'
 
 // Wrapper keyed by :id so switching between two different regattas fully
 // remounts the dashboard below — otherwise React would reuse the same
@@ -38,10 +39,20 @@ function RegattaDashboardForId({ regattaId }) {
   const [selectedIdentity, setSelectedIdentity] = useState(null)
   const [selectedClubs, setSelectedClubs] = useState(() => new Set())
   const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [selectedDay, setSelectedDay] = useState(null)
   const debouncedQuery = useDebouncedValue(searchInput, 150)
   const wasFilterEmptyRef = useRef(true)
   const stickyHeaderRef = useRef(null)
   const hasScrolledToActiveRaceRef = useRef(false)
+  const pendingScrollRaceRef = useRef(null)
+  // Captures whatever `data` is on the very first render — null if there was
+  // no cache, or the cached snapshot if there was. Comparing against this by
+  // *reference* (parseRegattaData always returns a fresh object) tells the
+  // auto-scroll effect below whether a real fetch has actually landed yet,
+  // without depending on ever observing `isRefreshing` flip through `true` —
+  // which isn't guaranteed: a fast-resolving fetch can have its whole
+  // true→false cycle batched into one commit that never renders `true`.
+  const initialDataRef = useRef(data)
 
   const handleSearchChange = (value) => {
     setSearchInput(value)
@@ -73,26 +84,61 @@ function RegattaDashboardForId({ regattaId }) {
   // Jump straight to the active race on first load instead of leaving the
   // parent to scroll past everything already finished. Runs exactly once —
   // guarded by a ref rather than state so it can't re-fire and fight a
-  // parent who has since scrolled away on their own.
+  // parent who has since scrolled away on their own. Only figures out
+  // *what* to scroll to and switches to its day if needed; the actual DOM
+  // lookup happens in the effect below, since a day switch re-renders the
+  // list before the target's card exists to scroll to.
   useEffect(() => {
     if (hasScrolledToActiveRaceRef.current || isLoading || !data) return
+    // A cached regatta loads with isLoading already false, before the
+    // background refetch this hook always kicks off has actually resolved —
+    // acting on that stale snapshot could point at yesterday's target race
+    // (or, worse now, yesterday's day) instead of today's. Wait until `data`
+    // has actually been replaced by that fetch's result — unless the fetch
+    // has confirmed it failed, in which case there's nothing better coming
+    // and the stale cache is still more useful than not scrolling at all.
+    if (data === initialDataRef.current && !error) return
     hasScrolledToActiveRaceRef.current = true
 
     const targetRaceNumber = findCurrentRaceNumber(data.entries)
     if (targetRaceNumber == null) return
+
+    const targetRace = data.entries.find((e) => e.type === 'race' && e.raceNumber === targetRaceNumber)
+    if (targetRace?.day != null) setSelectedDay(targetRace.day)
+    pendingScrollRaceRef.current = targetRaceNumber
+  }, [isLoading, data, error])
+
+  // Fires once right after the effect above on the same load (single-day —
+  // the target's day, if any, already matches what's rendered) and again
+  // after a day switch actually re-renders the list, so the lookup below is
+  // guaranteed to run against a DOM that could contain the target card.
+  useEffect(() => {
+    const targetRaceNumber = pendingScrollRaceRef.current
+    if (targetRaceNumber == null) return
     const element = document.getElementById(`race-${targetRaceNumber}`)
     if (!element) return
 
+    pendingScrollRaceRef.current = null
     element.scrollIntoView({ behavior: 'auto', block: 'start' })
     // The header is sticky, not static, so block: 'start' alone would land
     // the card right underneath it; pull back up by however tall the header
     // actually rendered (search bar + filters expanded or not).
     const headerHeight = stickyHeaderRef.current?.offsetHeight ?? 0
     if (headerHeight) window.scrollBy(0, -headerHeight)
-  }, [isLoading, data])
+  })
 
   const entries = data?.entries ?? null
   const clubs = data?.clubs ?? []
+
+  const availableDays = useMemo(() => {
+    if (!entries) return []
+    const days = new Set()
+    for (const entry of entries) {
+      if (entry.type === 'race' && entry.day != null) days.add(entry.day)
+    }
+    return [...days].sort((a, b) => a - b)
+  }, [entries])
+  const activeDay = selectedDay ?? availableDays[0] ?? null
 
   const searchIndex = useMemo(() => buildSearchIndex(entries ?? []), [entries])
   const matchedNameSet = useMemo(() => getMatchedNameSet(searchIndex, debouncedQuery), [searchIndex, debouncedQuery])
@@ -115,21 +161,26 @@ function RegattaDashboardForId({ regattaId }) {
   // subset of it.
   const rankingGroups = useMemo(() => buildOverallRankings(entries ?? []), [entries])
 
+  // Entries with no day at all (every single-day regatta) always pass this
+  // check, so day-filtering is a no-op unless the sheet actually has one.
+  const onActiveDay = (entry) => entry.day == null || entry.day === activeDay
+
   const counts = useMemo(() => {
     if (!annotatedEntries) return { all: 0, filtered: 0, rankings: 0 }
-    const races = annotatedEntries.filter((e) => e.type === 'race')
+    const races = annotatedEntries.filter((e) => e.type === 'race' && onActiveDay(e))
     return {
       all: races.length,
       filtered: races.filter((r) => r.matched).length,
       rankings: rankingGroups.length,
     }
-  }, [annotatedEntries, rankingGroups])
+  }, [annotatedEntries, rankingGroups, activeDay])
 
   const visibleEntries = useMemo(() => {
     if (!annotatedEntries) return []
-    if (filterMode === 'filtered') return annotatedEntries.filter((e) => e.type === 'race' && e.matched)
-    return annotatedEntries
-  }, [annotatedEntries, filterMode])
+    const dayFiltered = annotatedEntries.filter(onActiveDay)
+    if (filterMode === 'filtered') return dayFiltered.filter((e) => e.type === 'race' && e.matched)
+    return dayFiltered
+  }, [annotatedEntries, filterMode, activeDay])
 
   let emptyState = null
   if (annotatedEntries && visibleEntries.length === 0) {
@@ -182,6 +233,7 @@ function RegattaDashboardForId({ regattaId }) {
         />
         <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-100/95 p-3 backdrop-blur">
           <SearchBar value={searchInput} onChange={handleSearchChange} />
+          <DayToggle days={availableDays} activeDay={activeDay} onChange={setSelectedDay} />
           <button
             type="button"
             aria-expanded={filtersExpanded}

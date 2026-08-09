@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import { parseRegattaData } from '../csvParser'
 import { laneMatchesClubs, buildSearchIndex } from '../search'
-import { SCHEDULE_ONLY, RESULTS_ONLY, RIDEAU_SCHEDULE_ONLY, RIDEAU_RESULTS_ONLY } from './fixtures'
+import {
+  SCHEDULE_ONLY,
+  RESULTS_ONLY,
+  RIDEAU_SCHEDULE_ONLY,
+  RIDEAU_RESULTS_ONLY,
+  MULTI_DAY_SCHEDULE,
+  MULTI_DAY_RESULTS,
+} from './fixtures'
 
 describe('parseRegattaData — schedule tab (matches the real live sheet today)', () => {
   it('parses races in order and captures the title', () => {
@@ -206,5 +213,47 @@ describe('parseRegattaData — Rideau format (age/gender/boat schedule, Lane-mar
   it('collects unique clubs the same way as the EOD format', () => {
     const { clubs } = parseRegattaData(RIDEAU_SCHEDULE_ONLY, RIDEAU_RESULTS_ONLY)
     expect(clubs).toEqual(expect.arrayContaining(['CPCC', 'RCC', 'PICC']))
+  })
+})
+
+describe('parseRegattaData — multi-day regattas (Day 1 / Day 2 dividers)', () => {
+  it('assigns day 1 to races before the divider and day 2 to races after it', () => {
+    const { entries } = parseRegattaData(MULTI_DAY_SCHEDULE, MULTI_DAY_RESULTS)
+    const byRace = (n) => entries.find((e) => e.type === 'race' && e.raceNumber === n)
+    expect(byRace(1).day).toBe(1)
+    expect(byRace(2).day).toBe(1)
+    expect(byRace(3).day).toBe(2)
+    expect(byRace(4).day).toBe(2)
+  })
+
+  it('does not create a race or break entry for the day-divider row itself', () => {
+    const { entries } = parseRegattaData(MULTI_DAY_SCHEDULE, MULTI_DAY_RESULTS)
+    expect(entries.filter((e) => e.type === 'break')).toHaveLength(0)
+    expect(entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)).toEqual([1, 2, 3, 4])
+  })
+
+  it("tracks day independently in the draw/results tab, for a race that's only found there", () => {
+    const { entries } = parseRegattaData('', MULTI_DAY_RESULTS)
+    const byRace = (n) => entries.find((e) => e.type === 'race' && e.raceNumber === n)
+    expect(byRace(1).day).toBe(1)
+    expect(byRace(2).day).toBe(1)
+    expect(byRace(3).day).toBe(2)
+    expect(byRace(4).day).toBe(2)
+  })
+
+  it('tags a break between two days with whichever day precedes it', () => {
+    const scheduleWithBreak = MULTI_DAY_SCHEDULE.replace(
+      ',Day 2,,,,',
+      ',LUNCH BREAK,,,,\n,Day 2,,,,',
+    )
+    const { entries } = parseRegattaData(scheduleWithBreak, MULTI_DAY_RESULTS)
+    const lunch = entries.find((e) => e.type === 'break')
+    expect(lunch.label).toBe('LUNCH BREAK')
+    expect(lunch.day).toBe(1)
+  })
+
+  it('has no day at all on a single-day regatta (no divider ever seen)', () => {
+    const { entries } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
+    expect(entries.every((e) => e.day === undefined)).toBe(true)
   })
 })

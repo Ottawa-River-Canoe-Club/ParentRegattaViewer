@@ -66,3 +66,43 @@ DNF,4,MacPherson Lowry / Dean Pierce / Tristan Wallace / Till Slanina,CPCC,DNF,,
 6,3,"Paul Mullen, Vasyl Zelnichenko, Sarah Kennedy, Amelia Gauthier",PICC,,00:00'45.04,,,
 ,4,Alex Smith / Adam Schlosser,,,00:02'08.42,,,
 `
+
+// Multi-day regatta: a plain text row ("Day 1" / "Day 2") divides each day's
+// block of races instead of a real header. Both tabs carry their own
+// dividers, at the same points in each tab's row order, matching how a real
+// two-day sheet's schedule and draw/results tabs are laid out in parallel.
+export const MULTI_DAY_SCHEDULE = `,,,,,
+,Ontario Championships 2026,,,,
+,Time,Race #,Event,Heat #,Distance
+,Day 1,,,,
+,8:00:00,1,U14 Boys K1,Heat 1,500m
+,8:05:00,2,U14 Boys K2,Heat 1,500m
+,Day 2,,,,
+,9:00:00,3,U12 Mixed C4,Heat 1,500m
+,9:05:00,4,U14 Girls C-15,FINAL,500m
+`
+
+export const MULTI_DAY_RESULTS = `Day 1,,,,,,
+,,,,,,
+Event,1,U14 BOYS K1,HEAT 1,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,John Smith,ORCC,2:15.3,1,10
+,,,,,,
+Event,2,U14 BOYS K2,HEAT 1,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,Emery Gautihier,ORCC,,,
+,,,,,,
+Day 2,,,,,,
+,,,,,,
+Event,3,U12 MIXED C4,HEAT 1,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,Ben Cooper,ORCC,,,
+,,,,,,
+Event,4,U14 GIRLS C-15,FINAL,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,Kenzie Cooper,NBCC,,,
+`

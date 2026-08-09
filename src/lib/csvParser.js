@@ -88,6 +88,19 @@ function extractTitle(rows, headerRowIdx) {
   return title
 }
 
+/** True (with the day number) for a text-only "Day 1 Schedule" / "Day 2"
+ * divider row inserted between a multi-day regatta's daily blocks of races.
+ * Checked before any other row-type test in every section parser, so a
+ * divider can never be mistaken for a race, a break, a block header, or —
+ * worst case — a stray lane row with the divider text as its "name". */
+function matchDayDivider(cells) {
+  for (const cell of cells) {
+    const match = cell.match(/^day\s*(\d+)\b/i)
+    if (match) return Number(match[1])
+  }
+  return null
+}
+
 function parseScheduleSection(rows) {
   const headerRowIdx = rows.findIndex((row) => {
     const map = findColumnMap(row, SCHEDULE_ALIASES)
@@ -102,10 +115,17 @@ function parseScheduleSection(rows) {
   const title = extractTitle(rows, headerRowIdx)
   const scheduleMap = new Map()
   const scheduleOrder = []
+  let currentDay
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const cells = rows[i].map(normalize)
     if (cells.every((c) => c === '')) continue
+
+    const dayMatch = matchDayDivider(cells)
+    if (dayMatch !== null) {
+      currentDay = dayMatch
+      continue
+    }
 
     // Re-matching the header itself (e.g. a repeated header further down) — skip, not a data row.
     if (findColumnMap(rows[i], SCHEDULE_ALIASES).time === colMap.time && normalizeKey(cells[colMap.time]) === 'TIME') {
@@ -121,13 +141,14 @@ function parseScheduleSection(rows) {
         event: cells[colMap.event] || '',
         heat: normalizeHeat(cells[colMap.heat]),
         distance: cells[colMap.distance] || '',
+        day: currentDay,
       })
       scheduleOrder.push({ type: 'race', raceNumber })
     } else {
       const label = [cells[colMap.time], cells[colMap.event], cells[colMap.heat], cells[colMap.distance]].find(
         (c) => c && c.length > 0,
       )
-      if (label) scheduleOrder.push({ type: 'break', label })
+      if (label) scheduleOrder.push({ type: 'break', label, day: currentDay })
     }
   }
 
@@ -148,10 +169,17 @@ function parseRideauScheduleSection(rows) {
   const title = extractTitle(rows, headerRowIdx)
   const scheduleMap = new Map()
   const scheduleOrder = []
+  let currentDay
 
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const cells = rows[i].map(normalize)
     if (cells.every((c) => c === '')) continue
+
+    const dayMatch = matchDayDivider(cells)
+    if (dayMatch !== null) {
+      currentDay = dayMatch
+      continue
+    }
 
     const raceCell = cells[0]
     const raceNumber = parseInt(raceCell, 10)
@@ -163,6 +191,7 @@ function parseRideauScheduleSection(rows) {
         event,
         heat: normalizeHeat(cells[colMap.final]),
         distance: cells[colMap.distance] || '',
+        day: currentDay,
       })
       scheduleOrder.push({ type: 'race', raceNumber })
     } else {
@@ -170,7 +199,7 @@ function parseRideauScheduleSection(rows) {
       // its own TIME/EVENT/HEAT/DISTANCE columns) — take whatever text
       // shows up after the race-number column.
       const label = cells.slice(1).find((c) => c && c.length > 0)
-      if (label) scheduleOrder.push({ type: 'break', label })
+      if (label) scheduleOrder.push({ type: 'break', label, day: currentDay })
     }
   }
 
@@ -181,10 +210,17 @@ function parseResultsSection(rows) {
   const blocks = []
   let current = null
   let colMap = null
+  let currentDay
 
   for (const row of rows) {
     const cells = row.map(normalize)
     if (cells.every((c) => c === '')) continue
+
+    const dayMatch = matchDayDivider(cells)
+    if (dayMatch !== null) {
+      currentDay = dayMatch
+      continue
+    }
 
     const eventIdx = cells.findIndex((c) => c.toUpperCase() === 'EVENT')
     if (eventIdx !== -1) {
@@ -194,6 +230,7 @@ function parseResultsSection(rows) {
         eventName: cells[eventIdx + 2] || '',
         heat: normalizeHeat(cells[eventIdx + 3] || ''),
         distance: cells[eventIdx + 4] || '',
+        day: currentDay,
         lanes: [],
       }
       blocks.push(current)
@@ -279,10 +316,17 @@ function isRideauEventRow(cells) {
 function parseRideauResultsSection(rows) {
   const blocks = []
   let current = null
+  let currentDay
 
   for (const row of rows) {
     const cells = row.map(normalize)
     if (cells.every((c) => c === '')) continue
+
+    const dayMatch = matchDayDivider(cells)
+    if (dayMatch !== null) {
+      currentDay = dayMatch
+      continue
+    }
 
     if (isRideauEventRow(cells)) {
       const { event: eventName, distance } = splitTrailingDistance(cells[2])
@@ -291,6 +335,7 @@ function parseRideauResultsSection(rows) {
         eventName,
         heat: normalizeHeat(cells[3]),
         distance,
+        day: currentDay,
         lanes: [],
       }
       blocks.push(current)
@@ -346,7 +391,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
 
   for (const item of scheduleOrder) {
     if (item.type === 'break') {
-      entries.push({ type: 'break', label: item.label })
+      entries.push({ type: 'break', label: item.label, day: item.day })
       continue
     }
 
@@ -362,6 +407,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
       event: sched?.event || result?.eventName || '',
       heat: sched?.heat || result?.heat || '',
       distance: sched?.distance || result?.distance || '',
+      day: sched?.day ?? result?.day,
       lanes,
       hasDraw: lanes.length > 0,
       hasResults: lanes.some((l) => l.time || l.finish || l.points),
@@ -380,6 +426,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
       event: result.eventName || '',
       heat: result.heat || '',
       distance: result.distance || '',
+      day: result.day,
       lanes: result.lanes,
       hasDraw: result.lanes.length > 0,
       hasResults: result.lanes.some((l) => l.time || l.finish || l.points),
