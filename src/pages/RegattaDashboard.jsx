@@ -109,23 +109,19 @@ function RegattaDashboardForId({ regattaId }) {
   }, [entries, debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs])
 
   const counts = useMemo(() => {
-    if (!annotatedEntries) return { all: 0, filtered: 0, live: 0 }
+    if (!annotatedEntries) return { all: 0, filtered: 0 }
     const races = annotatedEntries.filter((e) => e.type === 'race')
     return {
       all: races.length,
       filtered: races.filter((r) => r.matched).length,
-      live: races.filter((r) => r.hasResults).length,
     }
   }, [annotatedEntries])
 
   const visibleEntries = useMemo(() => {
     if (!annotatedEntries) return []
     if (filterMode === 'filtered') return annotatedEntries.filter((e) => e.type === 'race' && e.matched)
-    if (filterMode === 'live') {
-      return annotatedEntries.filter((e) => e.type === 'race' && e.hasResults && (!hasActiveFilter || e.matched))
-    }
     return annotatedEntries
-  }, [annotatedEntries, filterMode, hasActiveFilter])
+  }, [annotatedEntries, filterMode])
 
   let emptyState = null
   if (annotatedEntries && visibleEntries.length === 0) {
@@ -143,8 +139,6 @@ function RegattaDashboardForId({ regattaId }) {
       } else {
         emptyState = { title: 'No races found', message: `Nobody matching "${searchInput}" is in today's schedule.` }
       }
-    } else if (filterMode === 'live') {
-      emptyState = { title: 'No results posted yet', message: 'Finished races will show up here as they come in.' }
     } else {
       emptyState = { title: 'No races in the schedule yet', message: 'Check back once the schedule is published.' }
     }
