@@ -17,6 +17,18 @@ const LANE_ALIASES = {
   points: ['POINTS', 'PTS'],
 }
 
+// Rideau's schedule tab has no single "Event" column — the event name is
+// assembled from Age + Gender + Boat instead, and the race number has no
+// header text of its own (it's always column 0).
+const RIDEAU_SCHEDULE_ALIASES = {
+  age: ['AGE'],
+  gender: ['GENDER'],
+  boat: ['BOAT'],
+  distance: ['DISTANCE'],
+  final: ['FINAL'],
+  time: ['TIME'],
+}
+
 function normalize(cell) {
   return (cell ?? '').toString().trim()
 }
@@ -122,6 +134,49 @@ function parseScheduleSection(rows) {
   return { scheduleMap, scheduleOrder, title }
 }
 
+function parseRideauScheduleSection(rows) {
+  const headerRowIdx = rows.findIndex((row) => {
+    const map = findColumnMap(row, RIDEAU_SCHEDULE_ALIASES)
+    return map.age !== undefined && map.gender !== undefined && map.boat !== undefined
+  })
+
+  if (headerRowIdx === -1) {
+    return { scheduleMap: new Map(), scheduleOrder: [], title: null }
+  }
+
+  const colMap = findColumnMap(rows[headerRowIdx], RIDEAU_SCHEDULE_ALIASES)
+  const title = extractTitle(rows, headerRowIdx)
+  const scheduleMap = new Map()
+  const scheduleOrder = []
+
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
+    const cells = rows[i].map(normalize)
+    if (cells.every((c) => c === '')) continue
+
+    const raceCell = cells[0]
+    const raceNumber = parseInt(raceCell, 10)
+
+    if (Number.isInteger(raceNumber) && String(raceNumber) === raceCell) {
+      const event = [cells[colMap.age], cells[colMap.gender], cells[colMap.boat]].filter(Boolean).join(' ')
+      scheduleMap.set(raceNumber, {
+        time: cells[colMap.time] || '',
+        event,
+        heat: normalizeHeat(cells[colMap.final]),
+        distance: cells[colMap.distance] || '',
+      })
+      scheduleOrder.push({ type: 'race', raceNumber })
+    } else {
+      // No fixed column holds a break label here (unlike EOD, which reuses
+      // its own TIME/EVENT/HEAT/DISTANCE columns) — take whatever text
+      // shows up after the race-number column.
+      const label = cells.slice(1).find((c) => c && c.length > 0)
+      if (label) scheduleOrder.push({ type: 'break', label })
+    }
+  }
+
+  return { scheduleMap, scheduleOrder, title }
+}
+
 function parseResultsSection(rows) {
   const blocks = []
   let current = null
@@ -180,6 +235,109 @@ function parseResultsSection(rows) {
     if (block.raceNumber !== null) map.set(block.raceNumber, block)
   }
   return map
+}
+
+/** Rideau's draw tab folds the distance into the event name itself
+ * ("U16 Men C4 1000m") rather than giving it its own column — split it back
+ * out so `event` matches the schedule tab's shape and boatTypeFromEvent
+ * (which just reads the event's last word) still lands on the boat class
+ * instead of the distance. */
+function splitTrailingDistance(rawEvent) {
+  const match = rawEvent.match(/^(.*)\s+(\d+m)$/i)
+  if (!match) return { event: rawEvent, distance: '' }
+  return { event: match[1].trim(), distance: match[2] }
+}
+
+/** Rideau crews are usually "/"-separated ("A / B / C"), but at least one
+ * real sheet quoted a crew as a plain comma list instead — only fall back to
+ * comma-splitting when no "/" is present, so that fallback never fires on
+ * the normal case. */
+function splitRideauNames(namesCell) {
+  const delimiter = namesCell.includes('/') ? '/' : ','
+  return namesCell
+    .split(delimiter)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** True for a row that starts a Rideau race block: race number in column 0,
+ * literal "Lane" in column 1. EOD's results tab also has a "LANE" header,
+ * but on its own row with an empty column 0 — requiring both columns avoids
+ * confusing the two formats. */
+function isRideauEventRow(cells) {
+  const raceCell = cells[0]
+  const raceNumber = parseInt(raceCell, 10)
+  return Number.isInteger(raceNumber) && String(raceNumber) === raceCell && cells[1].toUpperCase() === 'LANE'
+}
+
+/** Unlike EOD, Rideau's draw tab has no separate lane-header row — the block
+ * header row above fixes every data row's column layout. The finish time
+ * itself is read from column 5 first, not column 4 as the header row's own
+ * "Time:" label (column 5) implies at a glance: column 4 turns out to hold a
+ * DNS/SCR status instead whenever a crew didn't finish, so it's only used as
+ * a fallback. */
+function parseRideauResultsSection(rows) {
+  const blocks = []
+  let current = null
+
+  for (const row of rows) {
+    const cells = row.map(normalize)
+    if (cells.every((c) => c === '')) continue
+
+    if (isRideauEventRow(cells)) {
+      const { event: eventName, distance } = splitTrailingDistance(cells[2])
+      current = {
+        raceNumber: parseInt(cells[0], 10),
+        eventName,
+        heat: normalizeHeat(cells[3]),
+        distance,
+        lanes: [],
+      }
+      blocks.push(current)
+      continue
+    }
+
+    if (!current) continue
+
+    const laneNumber = cells[1] || ''
+    if (!laneNumber) continue // stray annotation rows ("Move Starter to 200m") have no lane number
+
+    current.lanes.push({
+      laneNumber,
+      names: splitRideauNames(cells[2] || ''),
+      clubs: (cells[3] || '').split('/').map(normalizeClub).filter(Boolean),
+      time: cells[5] || cells[4] || '',
+      finish: cells[0] || '',
+      points: '',
+    })
+  }
+
+  const map = new Map()
+  for (const block of blocks) map.set(block.raceNumber, block)
+  return map
+}
+
+/** Scans the draw/results tab's first ~10 rows for a Rideau race block
+ * header (see isRideauEventRow). Defaults to EOD when nothing matches. */
+function sniffResultsFormat(rows) {
+  const limit = Math.min(10, rows.length)
+  for (let i = 0; i < limit; i++) {
+    if (isRideauEventRow(rows[i].map(normalize))) return 'rideau'
+  }
+  return 'eod'
+}
+
+/** Sniffs from whichever tab actually has content — a Rideau regatta with no
+ * results posted yet would otherwise default to EOD (since sniffResultsFormat
+ * finds nothing to match) and fail to parse its own schedule on race morning. */
+function detectFormat(scheduleRows, resultsRows) {
+  if (sniffResultsFormat(resultsRows) === 'rideau') return 'rideau'
+
+  const scheduleLooksRideau = scheduleRows.some((row) => {
+    const map = findColumnMap(row, RIDEAU_SCHEDULE_ALIASES)
+    return map.age !== undefined && map.gender !== undefined && map.boat !== undefined
+  })
+  return scheduleLooksRideau ? 'rideau' : 'eod'
 }
 
 function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
@@ -257,20 +415,24 @@ function extractUniqueClubs(entries) {
 }
 
 /**
- * Parses the regatta's two source tabs — the schedule tab (Time/Race#/Event/
- * Heat#/Distance) and the draw/results tab (repeating Event + LANE blocks) —
- * into a single ordered list of race/break entries. The two tabs are fetched
- * as separate CSV exports (see useRegattaData), so each is parsed on its own
- * rather than split out of one combined document. Column positions are
- * detected from header text rather than assumed, since the two tabs aren't
- * even consistent with each other about a leading blank column.
+ * Parses the regatta's two source tabs into a single ordered list of
+ * race/break entries. The two tabs are fetched as separate CSV exports (see
+ * useRegattaData), so each is parsed on its own rather than split out of one
+ * combined document. Column positions are detected from header text rather
+ * than assumed — including which *format* a given regatta's sheet uses in
+ * the first place (see detectFormat), since different organizing clubs lay
+ * their schedule/draw sheets out with entirely different columns, not just
+ * different header spelling.
  */
 export function parseRegattaData(scheduleCsvText, resultsCsvText) {
   const { data: scheduleRows } = Papa.parse(scheduleCsvText ?? '', { skipEmptyLines: false })
   const { data: resultsRows } = Papa.parse(resultsCsvText ?? '', { skipEmptyLines: false })
 
-  const { scheduleMap, scheduleOrder, title } = parseScheduleSection(scheduleRows)
-  const resultsMap = parseResultsSection(resultsRows)
+  const format = detectFormat(scheduleRows, resultsRows)
+  const { scheduleMap, scheduleOrder, title } =
+    format === 'rideau' ? parseRideauScheduleSection(scheduleRows) : parseScheduleSection(scheduleRows)
+  const resultsMap = format === 'rideau' ? parseRideauResultsSection(resultsRows) : parseResultsSection(resultsRows)
+
   const entries = mergeSections(scheduleOrder, scheduleMap, resultsMap)
   const clubs = extractUniqueClubs(entries)
 
