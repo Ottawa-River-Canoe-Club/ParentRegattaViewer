@@ -29,6 +29,21 @@ create table if not exists public.regattas (
   created_at timestamptz not null default now()
 );
 
+-- Regattas can now span multiple days (weather delays, or a multi-day
+-- championship outright) — `date` becomes a legacy single-day fallback
+-- rather than the source of truth. Loosened to nullable so new rows aren't
+-- forced to fill in a field the app no longer writes, and every existing
+-- row is backfilled so old regattas keep working with no code-level special
+-- case for "this one predates start_date/end_date".
+alter table public.regattas alter column date drop not null;
+alter table public.regattas add column if not exists start_date date;
+alter table public.regattas add column if not exists end_date date;
+
+update public.regattas
+set start_date = coalesce(start_date, date),
+    end_date = coalesce(end_date, date)
+where start_date is null or end_date is null;
+
 create table if not exists public.allowed_admins (
   email citext primary key,
   created_at timestamptz not null default now()

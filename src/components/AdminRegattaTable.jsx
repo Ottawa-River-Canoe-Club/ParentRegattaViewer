@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { Archive, ArchiveRestore, ExternalLink, AlertTriangle } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
-import { formatDate } from '../lib/time'
+import { formatDateRange } from '../lib/time'
 
 function RegattaRow({ regatta, onChanged }) {
   const { toggleRegattaStatus } = useAdminActions()
@@ -27,7 +27,9 @@ function RegattaRow({ regatta, onChanged }) {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-bold text-slate-900">{regatta.name}</p>
-          <p className="text-sm font-medium text-slate-500">{formatDate(regatta.date)}</p>
+          <p className="text-sm font-medium text-slate-500">
+            {formatDateRange(regatta.start_date ?? regatta.date, regatta.end_date ?? regatta.date)}
+          </p>
         </div>
         <span
           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Plus, AlertTriangle } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
 
-const EMPTY_FORM = { name: '', date: '', scheduleUrl: '', resultsUrl: '' }
+const EMPTY_FORM = { name: '', startDate: '', endDate: '', scheduleUrl: '', resultsUrl: '' }
 
 export function AdminRegattaForm({ onAdded }) {
   const { addRegatta } = useAdminActions()
@@ -11,6 +11,18 @@ export function AdminRegattaForm({ onAdded }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+
+  // Most regattas are still one day — follow the start date into the end
+  // date automatically until the admin deliberately sets a different one,
+  // so a single-day event never requires entering the same date twice.
+  const handleStartDateChange = (e) => {
+    const value = e.target.value
+    setForm((f) => ({
+      ...f,
+      startDate: value,
+      endDate: !f.endDate || f.endDate === f.startDate ? value : f.endDate,
+    }))
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -42,16 +54,30 @@ export function AdminRegattaForm({ onAdded }) {
         />
       </label>
 
-      <label className="flex flex-col gap-1">
-        <span className="text-sm font-semibold text-slate-600">Date</span>
-        <input
-          type="date"
-          required
-          value={form.date}
-          onChange={setField('date')}
-          className="h-11 rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
-        />
-      </label>
+      <div className="flex gap-3">
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-sm font-semibold text-slate-600">Start Date</span>
+          <input
+            type="date"
+            required
+            value={form.startDate}
+            onChange={handleStartDateChange}
+            className="h-11 w-full rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
+          />
+        </label>
+
+        <label className="flex flex-1 flex-col gap-1">
+          <span className="text-sm font-semibold text-slate-600">End Date</span>
+          <input
+            type="date"
+            required
+            min={form.startDate || undefined}
+            value={form.endDate}
+            onChange={setField('endDate')}
+            className="h-11 w-full rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
+          />
+        </label>
+      </div>
 
       <label className="flex flex-col gap-1">
         <span className="text-sm font-semibold text-slate-600">Schedule Sheet URL</span>

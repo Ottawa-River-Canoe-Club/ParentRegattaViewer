@@ -7,6 +7,7 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { buildSearchIndex, getMatchedNameSet, findDisambiguationCandidates, annotateEntries } from '../lib/search'
 import { findCurrentRaceNumber } from '../lib/currentRace'
 import { buildOverallRankings } from '../lib/rankings'
+import { isWithinRegattaWindow } from '../lib/regattaWindow'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
 import { ClubFilterChips } from '../components/ClubFilterChips'
@@ -88,6 +89,13 @@ function RegattaDashboardForId({ regattaId }) {
   // *what* to scroll to and switches to its day if needed; the actual DOM
   // lookup happens in the effect below, since a day switch re-renders the
   // list before the target's card exists to scroll to.
+  //
+  // Gated on the regatta's own start/end dates rather than on race
+  // completion: a regatta can skip races to weather with no result ever
+  // posted for them, so "does the most recent race have a result" is not a
+  // reliable signal for "is this regatta currently happening." The date
+  // gate runs first — outside its active window this effect does nothing
+  // at all, so the page simply opens at the top of Day 1.
   useEffect(() => {
     if (hasScrolledToActiveRaceRef.current || isLoading || !data) return
     // A cached regatta loads with isLoading already false, before the
@@ -100,13 +108,15 @@ function RegattaDashboardForId({ regattaId }) {
     if (data === initialDataRef.current && !error) return
     hasScrolledToActiveRaceRef.current = true
 
+    if (!isWithinRegattaWindow(regatta)) return
+
     const targetRaceNumber = findCurrentRaceNumber(data.entries)
     if (targetRaceNumber == null) return
 
     const targetRace = data.entries.find((e) => e.type === 'race' && e.raceNumber === targetRaceNumber)
     if (targetRace?.day != null) setSelectedDay(targetRace.day)
     pendingScrollRaceRef.current = targetRaceNumber
-  }, [isLoading, data, error])
+  }, [isLoading, data, error, regatta])
 
   // Fires once right after the effect above on the same load (single-day —
   // the target's day, if any, already matches what's rendered) and again

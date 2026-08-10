@@ -8,13 +8,14 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
  * real gate on these — this hook doesn't need to re-check is_admin() itself,
  * a non-admin's insert/update simply gets rejected by Postgres. */
 export function useAdminActions() {
-  const addRegatta = useCallback(async ({ name, date, scheduleUrl, resultsUrl }) => {
+  const addRegatta = useCallback(async ({ name, startDate, endDate, scheduleUrl, resultsUrl }) => {
     const sheetId = parseSheetId(scheduleUrl)
     if (!sheetId) return { error: "Couldn't find a Sheet ID in that Schedule Sheet URL" }
 
     const { error } = await supabase.from('regattas').insert({
       name,
-      date,
+      start_date: startDate,
+      end_date: endDate,
       sheet_url: sheetId,
       results_gid: parseGid(resultsUrl),
       status: 'active',

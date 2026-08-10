@@ -1,6 +1,6 @@
 import { Link } from 'react-router'
 import { CalendarDays, ChevronRight, Archive } from 'lucide-react'
-import { formatDate } from '../lib/time'
+import { formatDateRange } from '../lib/time'
 
 export function RegattaListItem({ regatta }) {
   return (
@@ -20,7 +20,7 @@ export function RegattaListItem({ regatta }) {
         </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-500">
           <CalendarDays className="h-4 w-4" />
-          {formatDate(regatta.date)}
+          {formatDateRange(regatta.start_date ?? regatta.date, regatta.end_date ?? regatta.date)}
         </p>
       </div>
       <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />

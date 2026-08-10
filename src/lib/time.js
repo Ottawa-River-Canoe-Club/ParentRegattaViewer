@@ -28,6 +28,15 @@ export function formatDate(isoDate) {
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 }
 
+/** Formats a regatta's [startDate, endDate] window for display, collapsing
+ * to a single formatted date when they're the same day (or endDate is
+ * missing) rather than showing a redundant "Aug 15 – Aug 15". */
+export function formatDateRange(startDate, endDate) {
+  const start = formatDate(startDate)
+  if (!endDate || endDate === startDate) return start
+  return `${start} – ${formatDate(endDate)}`
+}
+
 export function formatRelativeTime(timestamp) {
   if (!timestamp) return ''
   const diffMs = Date.now() - timestamp
