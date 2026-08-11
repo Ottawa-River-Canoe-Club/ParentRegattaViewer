@@ -46,7 +46,7 @@ describe('athlete disambiguation', () => {
     const { index } = setup()
     const candidates = findDisambiguationCandidates(index, 'John Smith')
     expect(candidates).toHaveLength(2)
-    expect(candidates.map((c) => c.club).sort()).toEqual(['Carleton Place Canoe Club', 'Ottawa River Canoe Club'])
+    expect(candidates.map((c) => c.club).sort()).toEqual(['CPCC', 'ORCC'])
   })
 
   it('does not prompt disambiguation for the same athlete racing solo and in a mixed crew', () => {
@@ -103,10 +103,10 @@ describe('disambiguated identity filtering', () => {
   it('narrows to exactly the selected athlete once disambiguated', () => {
     const { entries } = setup()
     const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
-    const orccJohn = race1.lanes.find((l) => l.clubs.includes('Ottawa River Canoe Club') && l.names.includes('John Smith'))
-    const cpccJohn = race1.lanes.find((l) => l.clubs.includes('Carleton Place Canoe Club') && l.names.includes('John Smith'))
+    const orccJohn = race1.lanes.find((l) => l.clubs.includes('ORCC') && l.names.includes('John Smith'))
+    const cpccJohn = race1.lanes.find((l) => l.clubs.includes('CPCC') && l.names.includes('John Smith'))
 
-    const identity = { name: 'John Smith', club: 'Ottawa River Canoe Club' }
+    const identity = { name: 'John Smith', club: 'ORCC' }
     expect(laneMatchesIdentity(orccJohn, identity)).toBe(true)
     expect(laneMatchesIdentity(cpccJohn, identity)).toBe(false)
   })
@@ -119,8 +119,8 @@ describe('crew details attached to disambiguation candidates', () => {
     expect(emery.crews).toHaveLength(1)
     expect(emery.crews[0]).toMatchObject({ raceNumber: 2, boatType: 'K2' })
     expect(emery.crews[0].athletes).toEqual([
-      { name: 'Emery Gautihier', club: 'Ottawa River Canoe Club' },
-      { name: 'Henry Trussler', club: 'Ottawa River Canoe Club' },
+      { name: 'Emery Gautihier', club: 'ORCC' },
+      { name: 'Henry Trussler', club: 'ORCC' },
     ])
   })
 
@@ -132,12 +132,11 @@ describe('crew details attached to disambiguation candidates', () => {
     expect(ben.crews.map((c) => c.boatType).sort()).toEqual(['C4', 'K2'])
 
     const mixedCrew = ben.crews.find((c) => c.boatType === 'C4')
-    const fullMixedClub = 'Ottawa River Canoe Club/Carleton Place Canoe Club'
     expect(mixedCrew.athletes).toEqual([
-      { name: 'Ben Cooper', club: fullMixedClub },
-      { name: 'Maverick Lacelle', club: fullMixedClub },
-      { name: 'Alex Chan', club: fullMixedClub },
-      { name: 'Sam Lee', club: fullMixedClub },
+      { name: 'Ben Cooper', club: 'ORCC/CPCC' },
+      { name: 'Maverick Lacelle', club: 'ORCC/CPCC' },
+      { name: 'Alex Chan', club: 'ORCC/CPCC' },
+      { name: 'Sam Lee', club: 'ORCC/CPCC' },
     ])
   })
 
@@ -169,7 +168,7 @@ describe('annotateEntries', () => {
       query: '',
       selectedIdentity: null,
       matchedNameSet: new Set(),
-      selectedClubs: new Set(['North Bay Canoe Club']),
+      selectedClubs: new Set(['NBCC']),
     })
 
     const race4 = annotated.find((e) => e.type === 'race' && e.raceNumber === 4) // Kenzie Cooper, NBCC
@@ -187,7 +186,7 @@ describe('annotateEntries', () => {
       query: 'Ben Cooper',
       selectedIdentity: null,
       matchedNameSet,
-      selectedClubs: new Set(['North Bay Canoe Club']),
+      selectedClubs: new Set(['NBCC']),
     })
 
     const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2)
@@ -197,14 +196,14 @@ describe('annotateEntries', () => {
     expect(race3.matched).toBe(false)
   })
 
-  it('a name query for "Zach" combined with the Ottawa River Canoe Club chip only matches Zachs from that club', () => {
+  it('a name query for "Zach" combined with the ORCC club chip only matches Zachs from ORCC', () => {
     const { entries, index } = setup()
     const matchedNameSet = getMatchedNameSet(index, 'Zach')
     const annotated = annotateEntries(entries, {
       query: 'Zach',
       selectedIdentity: null,
       matchedNameSet,
-      selectedClubs: new Set(['Ottawa River Canoe Club']),
+      selectedClubs: new Set(['ORCC']),
     })
 
     const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1)

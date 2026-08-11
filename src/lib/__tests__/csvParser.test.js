@@ -66,10 +66,10 @@ describe('parseRegattaData — draw/results tab (separate CSV export, own gid)',
     expect(race2.hasResults).toBe(false) // blank time/finish/points
   })
 
-  it('splits a mixed-club boat into its individual clubs', () => {
+  it('splits mixed-club boats into individual club codes', () => {
     const { entries } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
     const race3 = entries.find((e) => e.type === 'race' && e.raceNumber === 3)
-    expect(race3.lanes[0].clubs).toEqual(['Ottawa River Canoe Club', 'Carleton Place Canoe Club'])
+    expect(race3.lanes[0].clubs).toEqual(['ORCC', 'CPCC'])
     expect(race3.lanes[0].names).toEqual(['Ben Cooper', 'Maverick Lacelle', 'Alex Chan', 'Sam Lee'])
   })
 
@@ -86,9 +86,9 @@ describe('parseRegattaData — draw/results tab (separate CSV export, own gid)',
 describe('parseRegattaData — unique club extraction', () => {
   it('collects every distinct club, alphabetically, splitting interclub crews into their component clubs', () => {
     const { clubs } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
-    // Race 3's lane is the compound "ORCC/CPCC" — it must contribute the two
-    // clubs' full names individually, not a single combined entry.
-    expect(clubs).toEqual(['Carleton Place Canoe Club', 'North Bay Canoe Club', 'Ottawa River Canoe Club'])
+    // Race 3's lane is the compound "ORCC/CPCC" — it must contribute ORCC and
+    // CPCC individually, not a single "ORCC/CPCC" entry.
+    expect(clubs).toEqual(['CPCC', 'NBCC', 'ORCC'])
   })
 
   it('returns an empty list when there are no results yet', () => {
@@ -108,67 +108,67 @@ describe('parseRegattaData — club alias normalization', () => {
 ,2,Zach Miller,OR,,,
 `
 
-  it('expands shortened aliases all the way to each club\'s full name on each lane', () => {
+  it('expands shortened aliases to their canonical club code on each lane', () => {
     const { entries } = parseRegattaData('', ALIASED_RESULTS)
     const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
-    expect(race1.lanes[0].clubs).toEqual([
-      'Peterborough Canoe and Kayak Club',
-      'Ottawa River Canoe Club',
-      'Carleton Place Canoe Club',
-    ])
-    expect(race1.lanes[1].clubs).toEqual(['Ottawa River Canoe Club'])
+    expect(race1.lanes[0].clubs).toEqual(['PCKC', 'ORCC', 'CPCC'])
+    expect(race1.lanes[1].clubs).toEqual(['ORCC'])
   })
 
-  it('collapses aliased, acronym, and full-name spellings into one entry in the unique-club list', () => {
+  it('collapses aliased and canonical spellings into one entry in the unique-club list', () => {
     const { clubs } = parseRegattaData('', ALIASED_RESULTS)
-    expect(clubs).toEqual([
-      'Carleton Place Canoe Club',
-      'Ottawa River Canoe Club',
-      'Peterborough Canoe and Kayak Club',
-    ])
+    expect(clubs).toEqual(['CPCC', 'ORCC', 'PCKC'])
   })
 
-  it('lets the Ottawa River Canoe Club chip match a boat that was only ever written as "OR" in the sheet', () => {
+  it('lets the ORCC chip match a boat that was only ever written as "OR" in the sheet', () => {
     const { entries } = parseRegattaData('', ALIASED_RESULTS)
     const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
-    expect(laneMatchesClubs(race1.lanes[0], new Set(['Ottawa River Canoe Club']))).toBe(true)
-    expect(laneMatchesClubs(race1.lanes[1], new Set(['Ottawa River Canoe Club']))).toBe(true)
+    expect(laneMatchesClubs(race1.lanes[0], new Set(['ORCC']))).toBe(true)
+    expect(laneMatchesClubs(race1.lanes[1], new Set(['ORCC']))).toBe(true)
   })
 
   // The CKO draw tab alone had 35 distinct strings for what turned out to be
-  // a much smaller set of real clubs — a typo ("Buroak"), bare city names
-  // ("Richmond Hill"), and acronyms decoded against the sheet's own "OVERALL
-  // RESULTS" standings table and its own already-full-name spellings
-  // elsewhere (e.g. "Gananoque Canoe & Motorboat Club" told us GCC isn't a
-  // generic "Gananoque Canoe Club").
+  // a much smaller set of real clubs — a typo ("Buroak"), bare city names,
+  // full names (some of them club-specific, not a generic "<City> Canoe
+  // Club" — e.g. "Gananoque Canoe & Motorboat Club"), and acronyms, all for
+  // the same handful of real clubs. Every variant collapses to one short
+  // acronym: a lane block has room for one club per boat, not a full name,
+  // especially for an interclub crew showing two at once.
   const MESSY_CLUB_RESULTS = `Event,1,U16 MIXED C4,FINAL,500m,,
 ,,,,,,
 ,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
 ,1,Skater One,Buroak,,,
-,2,Skater Two,BCC,,,
-,3,Skater Three,Burloak,,,
-,4,Skater Four,BBCC,,,
-,5,Skater Five,RHCC,,,
-,6,Skater Six,CDBCC,,,
-,7,Skater Seven,GCC,,,
-,8,Skater Eight,SCC,,,
-,9,"Skater Nine, Skater Ten",CPC,,,
+,2,Skater Two,Burloak,,,
+,3,Skater Three,Burloak Canoe Club,,,
+,4,Skater Four,Balmy Beach,,,
+,5,Skater Five,Richmond Hill,,,
+,6,Skater Six,Cobourg District Boat and Canoe Club,,,
+,7,Skater Seven,Gananoque Canoe & Motorboat Club,,,
+,8,Skater Eight,Sudbury Canoe Club,,,
+,9,Skater Nine,CPC,,,
+,10,Skater Ten,South Niagara Canoe Club,,,
 `
 
-  it('normalizes a typo and every short-form/acronym variant found in the real sheet to its full club name', () => {
+  it('normalizes a typo and every short-form/full-name variant found in the real sheet to its acronym', () => {
     const { entries } = parseRegattaData('', MESSY_CLUB_RESULTS)
     const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
     const clubFor = (laneNumber) => race1.lanes.find((l) => l.laneNumber === laneNumber).clubs[0]
 
-    expect(clubFor('1')).toBe('Burloak Canoe Club') // typo
-    expect(clubFor('2')).toBe('Burloak Canoe Club') // acronym
-    expect(clubFor('3')).toBe('Burloak Canoe Club') // bare city name
-    expect(clubFor('4')).toBe('Balmy Beach Canoe Club')
-    expect(clubFor('5')).toBe('Richmond Hill Canoe Club')
-    expect(clubFor('6')).toBe('Cobourg District Boat and Canoe Club')
-    expect(clubFor('7')).toBe('Gananoque Canoe & Motorboat Club')
-    expect(clubFor('8')).toBe('Sudbury Canoe Club')
-    expect(clubFor('9')).toBe('Carleton Place Canoe Club') // "CPC", missing the second "C"
+    expect(clubFor('1')).toBe('BCC') // typo
+    expect(clubFor('2')).toBe('BCC') // bare city name
+    expect(clubFor('3')).toBe('BCC') // full name
+    expect(clubFor('4')).toBe('BBCC')
+    expect(clubFor('5')).toBe('RHCC')
+    expect(clubFor('6')).toBe('CDBCC')
+    expect(clubFor('7')).toBe('GCC')
+    expect(clubFor('8')).toBe('SCC')
+    expect(clubFor('9')).toBe('CPCC') // "CPC", missing the second "C" for "Club"
+    expect(clubFor('10')).toBe('SNCC') // never seen abbreviated in the real sheet — see CLUB_CODES
+  })
+
+  it('already-canonical acronyms pass through unchanged', () => {
+    const { clubs } = parseRegattaData('', RESULTS_ONLY)
+    expect(clubs).toEqual(expect.arrayContaining(['ORCC', 'NBCC']))
   })
 })
 
@@ -258,10 +258,7 @@ describe('parseRegattaData — Rideau format (age/gender/boat schedule, Lane-mar
 
   it('collects unique clubs the same way as the EOD format', () => {
     const { clubs } = parseRegattaData(RIDEAU_SCHEDULE_ONLY, RIDEAU_RESULTS_ONLY)
-    // PICC has no full-name mapping (never seen outside its own acronym), so
-    // it passes through unchanged — proving normalization doesn't force a
-    // full name onto a club it has no confident mapping for.
-    expect(clubs).toEqual(expect.arrayContaining(['Carleton Place Canoe Club', 'Rideau Canoe Club', 'PICC']))
+    expect(clubs).toEqual(expect.arrayContaining(['CPCC', 'RCC', 'PICC']))
   })
 })
 
@@ -369,10 +366,10 @@ describe('parseRegattaData — CKO format (Ontario Championships draw)', () => {
     const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, CKO_RESULTS_ONLY)
     const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
     const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
-    expect(race1.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['Rideau Canoe Club'])
-    expect(race1.lanes.find((l) => l.laneNumber === '1').clubs).toEqual(['Ottawa River Canoe Club'])
-    expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['Mississauga Canoe Club'])
-    expect(race2.lanes.find((l) => l.laneNumber === '1').clubs).toEqual(['Cobourg District Boat and Canoe Club'])
+    expect(race1.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['RCC'])
+    expect(race1.lanes.find((l) => l.laneNumber === '1').clubs).toEqual(['ORCC'])
+    expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['MCC'])
+    expect(race2.lanes.find((l) => l.laneNumber === '1').clubs).toEqual(['CDBCC'])
   })
 
   it('splits an interclub crew\'s club cell on "," as well as "/" — the real sheet used both', () => {
@@ -382,9 +379,6 @@ describe('parseRegattaData — CKO format (Ontario Championships draw)', () => {
     const commaInterclub = CKO_RESULTS_ONLY.replace('M. Kravchuk,MCC,', 'M. Kravchuk,"NBCC, PCKC",')
     const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, commaInterclub)
     const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
-    expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual([
-      'North Bay Canoe Club',
-      'Peterborough Canoe and Kayak Club',
-    ])
+    expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['NBCC', 'PCKC'])
   })
 })

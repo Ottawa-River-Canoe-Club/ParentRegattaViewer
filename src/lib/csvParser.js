@@ -46,60 +46,82 @@ function normalizeHeat(value) {
   return v
 }
 
-// The results sheet sometimes shortens club codes to fit an interclub crew's
-// CLUB cell within its character limit (e.g. "PCKC/OR/CP" rather than
-// "PCKC/ORCC/CPCC"). Map each shortened alias to its canonical code so those
-// crews are recognized as the same club as everyone else's, both in the
-// unique-club list and in each lane's own club data.
-const CLUB_ALIASES = {
+// The same real club shows up under its acronym, a bare city/area name, a
+// full name, or (once) a straight-up typo, depending on which cell of which
+// sheet you're reading — the CKO draw tab alone had 35 distinct strings for
+// what turned out to be a much smaller set of actual clubs. Standardized on
+// each club's short acronym rather than its full name: a lane block has
+// room for one, not the other, especially for an interclub crew showing two
+// clubs at once ("Ottawa River Canoe Club / Rideau Canoe Club" doesn't fit;
+// "ORCC / RCC" does). The full names this collapses away are never lost —
+// see CLUB_LEGEND below, which is what ClubLegend renders. Keys are matched
+// case-insensitively (see normalizeClub).
+const CLUB_CODES = {
+  // 2-letter shorthand the results sheet sometimes uses to fit an interclub
+  // crew's CLUB cell under a character limit (e.g. "PCKC/OR/CP" instead of
+  // "PCKC/ORCC/CPCC").
   OR: 'ORCC',
   CP: 'CPCC',
   SL: 'SLCC',
+
+  BURLOAK: 'BCC',
+  BUROAK: 'BCC', // typo seen in the real sheet
+  'BURLOAK CANOE CLUB': 'BCC',
+  'BALMY BEACH': 'BBCC',
+  'BALMY BEACH CANOE CLUB': 'BBCC',
+  RIDEAU: 'RCC',
+  'RIDEAU CANOE CLUB': 'RCC',
+  'OTTAWA RIVER': 'ORCC',
+  'OTTAWA RIVER CANOE CLUB': 'ORCC',
+  MISSISSAUGA: 'MCC',
+  'MISSISSAUGA CANOE CLUB': 'MCC',
+  'CARLETON PLACE': 'CPCC',
+  'CARLETON PLACE CANOE CLUB': 'CPCC',
+  CPC: 'CPCC', // same club, missing the second "C" for "Club"
+  'RICHMOND HILL': 'RHCC',
+  'RICHMOND HILL CANOE CLUB': 'RHCC',
+  'NORTH BAY': 'NBCC',
+  'NORTH BAY CANOE CLUB': 'NBCC',
+  COBOURG: 'CDBCC',
+  'COBOURG DISTRICT BOAT AND CANOE CLUB': 'CDBCC',
+  GANANOQUE: 'GCC',
+  'GANANOQUE CANOE & MOTORBOAT CLUB': 'GCC',
+  PETERBOROUGH: 'PCKC',
+  'PETERBOROUGH CANOE AND KAYAK CLUB': 'PCKC',
+  SUDBURY: 'SCC',
+  'SUDBURY CANOE CLUB': 'SCC',
+  // Unlike the four above, this acronym was never actually seen in the real
+  // sheet (only the full name was) — SNCC is this same letters-of-the-name
+  // method applied on faith, not confirmed against an observed abbreviation.
+  'SOUTH NIAGARA': 'SNCC',
+  'SOUTH NIAGARA CANOE CLUB': 'SNCC',
 }
 
-// The same real club shows up under its acronym, a bare city/area name, or
-// (once) a straight-up typo, depending on which cell of which sheet you're
-// reading — the CKO draw tab alone had 35 distinct strings for what turned
-// out to be a much smaller set of actual clubs. Standardized on each club's
-// full name, since that's the form the sheet itself already uses for some
-// clubs (e.g. "Peterborough Canoe and Kayak Club", "Gananoque Canoe &
-// Motorboat Club") — picking a full name that's already attested in the
-// data beats inventing a generic "<City> Canoe Club" that might not match
-// what the club actually calls itself. Keys are matched case-insensitively
-// (see normalizeClub) against the *already-alias-collapsed* code, so "OR"
-// resolves ORCC's existing shorthand first and then expands from there.
-const CLUB_FULL_NAMES = {
-  BURLOAK: 'Burloak Canoe Club',
-  BUROAK: 'Burloak Canoe Club', // typo seen in the real sheet
+/** The inverse of CLUB_CODES, for the one place a full name is still wanted
+ * — ClubLegend. Built by hand rather than derived from CLUB_CODES because
+ * that map is many-aliases-to-one-acronym; this is deliberately one full
+ * name per acronym. Acronyms with no confidently-known full name (PICC,
+ * SLCC — real codes seen in other regattas' sheets, never expanded anywhere)
+ * are left out rather than guessed. */
+export const CLUB_LEGEND = {
   BCC: 'Burloak Canoe Club',
-  'BALMY BEACH': 'Balmy Beach Canoe Club',
   BBCC: 'Balmy Beach Canoe Club',
-  RIDEAU: 'Rideau Canoe Club',
   RCC: 'Rideau Canoe Club',
-  'OTTAWA RIVER': 'Ottawa River Canoe Club',
   ORCC: 'Ottawa River Canoe Club',
-  MISSISSAUGA: 'Mississauga Canoe Club',
   MCC: 'Mississauga Canoe Club',
-  'CARLETON PLACE': 'Carleton Place Canoe Club',
   CPCC: 'Carleton Place Canoe Club',
-  CPC: 'Carleton Place Canoe Club', // same club, missing the second "C" for "Club"
-  'RICHMOND HILL': 'Richmond Hill Canoe Club',
   RHCC: 'Richmond Hill Canoe Club',
-  'NORTH BAY': 'North Bay Canoe Club',
   NBCC: 'North Bay Canoe Club',
-  COBOURG: 'Cobourg District Boat and Canoe Club',
   CDBCC: 'Cobourg District Boat and Canoe Club',
-  GANANOQUE: 'Gananoque Canoe & Motorboat Club',
   GCC: 'Gananoque Canoe & Motorboat Club',
-  PETERBOROUGH: 'Peterborough Canoe and Kayak Club',
   PCKC: 'Peterborough Canoe and Kayak Club',
   SCC: 'Sudbury Canoe Club',
+  SNCC: 'South Niagara Canoe Club',
 }
 
 function normalizeClub(club) {
   const trimmed = normalize(club)
-  const collapsed = CLUB_ALIASES[trimmed] ?? trimmed
-  return CLUB_FULL_NAMES[collapsed.toUpperCase()] ?? collapsed
+  return CLUB_CODES[trimmed.toUpperCase()] ?? trimmed
 }
 
 /** Maps field names to column indexes by matching header text, so leading blank

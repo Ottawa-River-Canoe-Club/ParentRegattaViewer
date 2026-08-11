@@ -11,6 +11,7 @@ import { isWithinRegattaWindow } from '../lib/regattaWindow'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
 import { ClubFilterChips } from '../components/ClubFilterChips'
+import { ClubLegend } from '../components/ClubLegend'
 import { FilterChips } from '../components/FilterChips'
 import { DisambiguationPrompt } from '../components/DisambiguationPrompt'
 import { RaceCard } from '../components/RaceCard'
@@ -264,6 +265,7 @@ function RegattaDashboardForId({ regattaId }) {
           {filtersExpanded && (
             <>
               <ClubFilterChips clubs={clubs} selectedClubs={selectedClubs} onToggle={toggleClub} />
+              <ClubLegend clubs={clubs} />
               <FilterChips mode={filterMode} onChange={setFilterMode} counts={counts} />
               <DisambiguationPrompt
                 candidates={disambiguationCandidates}
