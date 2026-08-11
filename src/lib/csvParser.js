@@ -57,9 +57,49 @@ const CLUB_ALIASES = {
   SL: 'SLCC',
 }
 
+// The same real club shows up under its acronym, a bare city/area name, or
+// (once) a straight-up typo, depending on which cell of which sheet you're
+// reading — the CKO draw tab alone had 35 distinct strings for what turned
+// out to be a much smaller set of actual clubs. Standardized on each club's
+// full name, since that's the form the sheet itself already uses for some
+// clubs (e.g. "Peterborough Canoe and Kayak Club", "Gananoque Canoe &
+// Motorboat Club") — picking a full name that's already attested in the
+// data beats inventing a generic "<City> Canoe Club" that might not match
+// what the club actually calls itself. Keys are matched case-insensitively
+// (see normalizeClub) against the *already-alias-collapsed* code, so "OR"
+// resolves ORCC's existing shorthand first and then expands from there.
+const CLUB_FULL_NAMES = {
+  BURLOAK: 'Burloak Canoe Club',
+  BUROAK: 'Burloak Canoe Club', // typo seen in the real sheet
+  BCC: 'Burloak Canoe Club',
+  'BALMY BEACH': 'Balmy Beach Canoe Club',
+  BBCC: 'Balmy Beach Canoe Club',
+  RIDEAU: 'Rideau Canoe Club',
+  RCC: 'Rideau Canoe Club',
+  'OTTAWA RIVER': 'Ottawa River Canoe Club',
+  ORCC: 'Ottawa River Canoe Club',
+  MISSISSAUGA: 'Mississauga Canoe Club',
+  MCC: 'Mississauga Canoe Club',
+  'CARLETON PLACE': 'Carleton Place Canoe Club',
+  CPCC: 'Carleton Place Canoe Club',
+  CPC: 'Carleton Place Canoe Club', // same club, missing the second "C" for "Club"
+  'RICHMOND HILL': 'Richmond Hill Canoe Club',
+  RHCC: 'Richmond Hill Canoe Club',
+  'NORTH BAY': 'North Bay Canoe Club',
+  NBCC: 'North Bay Canoe Club',
+  COBOURG: 'Cobourg District Boat and Canoe Club',
+  CDBCC: 'Cobourg District Boat and Canoe Club',
+  GANANOQUE: 'Gananoque Canoe & Motorboat Club',
+  GCC: 'Gananoque Canoe & Motorboat Club',
+  PETERBOROUGH: 'Peterborough Canoe and Kayak Club',
+  PCKC: 'Peterborough Canoe and Kayak Club',
+  SCC: 'Sudbury Canoe Club',
+}
+
 function normalizeClub(club) {
   const trimmed = normalize(club)
-  return CLUB_ALIASES[trimmed] ?? trimmed
+  const collapsed = CLUB_ALIASES[trimmed] ?? trimmed
+  return CLUB_FULL_NAMES[collapsed.toUpperCase()] ?? collapsed
 }
 
 /** Maps field names to column indexes by matching header text, so leading blank
@@ -307,6 +347,41 @@ function isRideauEventRow(cells) {
   return Number.isInteger(raceNumber) && String(raceNumber) === raceCell && cells[1].toUpperCase() === 'LANE'
 }
 
+/** True for a row that starts a CKO-format race block: the literal word
+ * "Race" alone in column 0. Unlike every other format, the race *number*
+ * isn't on this row at all — it's alone on the next non-blank row, with the
+ * event name (column 1, heat/distance still embedded) and scheduled time
+ * (column 2) here instead. */
+function isCkoEventRow(cells) {
+  return normalizeKey(cells[0]) === 'RACE'
+}
+
+/** CKO's schedule and draw tabs both fold distance and heat into the event
+ * string ("U16 Women's C2 500m Final A") rather than giving either its own
+ * column — split them back out so `event`/`heat`/`distance` match every
+ * other format's shape, and so boatTypeFromEvent (which just reads the
+ * event's last word) still lands on the boat class. The heat descriptor is
+ * kept whole (including odd suffixes like "Final 1 - Timed Final") rather
+ * than parsed further. */
+function splitCkoEventDetails(rawEvent) {
+  const match = rawEvent.match(/^(.*?)\s+(\d+m)\s+(.+)$/i)
+  if (!match) return { event: rawEvent, heat: '', distance: '' }
+  return { event: match[1].trim(), distance: match[2], heat: match[3].trim() }
+}
+
+/** CKO crews mix three different delimiters within the same sheet — plain
+ * commas, "and", and "/" — sometimes even within the same crew string (e.g.
+ * "Anna Andrus/Chloe Andrus/Zara Dew, Aurora McWilliam"). Splitting on all
+ * three at once (rather than picking one like Rideau's splitRideauNames)
+ * is the only way to handle that mixed case; \b keeps "and" from matching
+ * inside a name like "Anderson". */
+function splitCkoNames(namesCell) {
+  return namesCell
+    .split(/\s*(?:\/|,|\band\b)\s*/i)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
 /** Unlike EOD, Rideau's draw tab has no separate lane-header row — the block
  * header row above fixes every data row's column layout. The finish time
  * itself is read from column 5 first, not column 4 as the header row's own
@@ -362,12 +437,87 @@ function parseRideauResultsSection(rows) {
   return map
 }
 
-/** Scans the draw/results tab's first ~10 rows for a Rideau race block
- * header (see isRideauEventRow). Defaults to EOD when nothing matches. */
+/** CKO's draw tab: a "Race,<event>,<time>" header row, then the race
+ * *number* alone on the next non-blank row (nowhere else does this), then a
+ * "Lane,Crew,Club,Finish,Time" header, then ten always-present lane rows
+ * (0–9) that are simply blank if no crew is entered in that lane. The tab
+ * also has a handful of fully-blank template blocks trailing the real
+ * schedule (an empty "Race" row with no event name at all) — those are
+ * skipped outright, not turned into a race with no name. A per-club overall
+ * standings table sits off to the right of every row; since this parser
+ * only ever reads columns 0–4 it's never even looked at. */
+function parseCkoResultsSection(rows) {
+  const blocks = []
+  let current = null
+  let pendingBlock = null
+  let currentDay
+
+  for (const row of rows) {
+    const cells = row.map(normalize)
+    if (cells.every((c) => c === '')) continue
+
+    const dayMatch = matchDayDivider(cells)
+    if (dayMatch !== null) {
+      currentDay = dayMatch
+      continue
+    }
+
+    if (isCkoEventRow(cells)) {
+      current = null
+      pendingBlock = null
+      const rawEvent = cells[1] || ''
+      if (!rawEvent) continue // an empty template block — nothing was ever filled in
+      pendingBlock = { ...splitCkoEventDetails(rawEvent), time: cells[2] || '' }
+      continue
+    }
+
+    if (pendingBlock) {
+      const raceCell = cells[0]
+      const raceNumber = parseInt(raceCell, 10)
+      if (Number.isInteger(raceNumber) && String(raceNumber) === raceCell) {
+        current = { raceNumber, ...pendingBlock, day: currentDay, lanes: [] }
+        blocks.push(current)
+      }
+      pendingBlock = null
+      continue
+    }
+
+    if (normalizeKey(cells[0]) === 'LANE') continue // "Lane,Crew,Club,Finish,Time" — fixed layout, nothing to map
+    if (!current) continue
+
+    const namesCell = cells[1] || ''
+    if (!namesCell) continue // one of the ten pre-listed lanes with no crew entered
+
+    current.lanes.push({
+      laneNumber: cells[0] || '',
+      names: splitCkoNames(namesCell),
+      // Interclub crews are usually "/"-separated, but at least one real
+      // lane used ", " instead ("NBCC, PCKC") — split on both so that isn't
+      // read back as one club literally named "NBCC, PCKC".
+      clubs: (cells[2] || '').split(/[/,]/).map(normalizeClub).filter(Boolean),
+      time: cells[4] || '',
+      finish: cells[3] || '',
+      points: '',
+    })
+  }
+
+  const map = new Map()
+  for (const block of blocks) map.set(block.raceNumber, block)
+  return map
+}
+
+/** Scans the draw/results tab's first ~10 rows for a Rideau or CKO race
+ * block header (see isRideauEventRow / isCkoEventRow). Defaults to EOD when
+ * nothing matches. CKO's block structure is present from the moment the
+ * draw is drafted — the "Race,<event>,<time>" header rows exist whether or
+ * not any lane has actually finished — so this sniffs reliably even before
+ * race day, unlike a format that only reveals itself once results land. */
 function sniffResultsFormat(rows) {
   const limit = Math.min(10, rows.length)
   for (let i = 0; i < limit; i++) {
-    if (isRideauEventRow(rows[i].map(normalize))) return 'rideau'
+    const cells = rows[i].map(normalize)
+    if (isRideauEventRow(cells)) return 'rideau'
+    if (isCkoEventRow(cells)) return 'cko'
   }
   return 'eod'
 }
@@ -376,13 +526,27 @@ function sniffResultsFormat(rows) {
  * results posted yet would otherwise default to EOD (since sniffResultsFormat
  * finds nothing to match) and fail to parse its own schedule on race morning. */
 function detectFormat(scheduleRows, resultsRows) {
-  if (sniffResultsFormat(resultsRows) === 'rideau') return 'rideau'
+  const resultsFormat = sniffResultsFormat(resultsRows)
+  if (resultsFormat === 'rideau' || resultsFormat === 'cko') return resultsFormat
 
   const scheduleLooksRideau = scheduleRows.some((row) => {
     const map = findColumnMap(row, RIDEAU_SCHEDULE_ALIASES)
     return map.age !== undefined && map.gender !== undefined && map.boat !== undefined
   })
   return scheduleLooksRideau ? 'rideau' : 'eod'
+}
+
+/** CKO's schedule tab shares the exact same headers as EOD's (Race #/Event/
+ * Time), so it's parsed with the same parseScheduleSection — this just
+ * splits the heat and distance back out of each entry's raw event string
+ * afterwards, the same way the draw tab's blocks already are. */
+function applyCkoEventSplit(scheduleMap) {
+  for (const entry of scheduleMap.values()) {
+    const { event, heat, distance } = splitCkoEventDetails(entry.event)
+    entry.event = event
+    entry.heat = heat
+    entry.distance = distance
+  }
 }
 
 function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
@@ -476,9 +640,19 @@ export function parseRegattaData(scheduleCsvText, resultsCsvText) {
   const { data: resultsRows } = Papa.parse(resultsCsvText ?? '', { skipEmptyLines: false })
 
   const format = detectFormat(scheduleRows, resultsRows)
-  const { scheduleMap, scheduleOrder, title } =
-    format === 'rideau' ? parseRideauScheduleSection(scheduleRows) : parseScheduleSection(scheduleRows)
-  const resultsMap = format === 'rideau' ? parseRideauResultsSection(resultsRows) : parseResultsSection(resultsRows)
+
+  let scheduleMap, scheduleOrder, title, resultsMap
+  if (format === 'rideau') {
+    ;({ scheduleMap, scheduleOrder, title } = parseRideauScheduleSection(scheduleRows))
+    resultsMap = parseRideauResultsSection(resultsRows)
+  } else if (format === 'cko') {
+    ;({ scheduleMap, scheduleOrder, title } = parseScheduleSection(scheduleRows))
+    applyCkoEventSplit(scheduleMap)
+    resultsMap = parseCkoResultsSection(resultsRows)
+  } else {
+    ;({ scheduleMap, scheduleOrder, title } = parseScheduleSection(scheduleRows))
+    resultsMap = parseResultsSection(resultsRows)
+  }
 
   const entries = mergeSections(scheduleOrder, scheduleMap, resultsMap)
   const clubs = extractUniqueClubs(entries)

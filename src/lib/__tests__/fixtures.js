@@ -106,3 +106,51 @@ Event,4,U14 GIRLS C-15,FINAL,500m,,
 ,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
 ,1,Kenzie Cooper,NBCC,,,
 `
+
+// CKO format: schedule tab shares EOD's exact headers (Race #/Event/Time),
+// but folds heat and distance into the event string itself ("U16 Women's
+// C2 500m Final A") rather than giving either its own column. A trailing,
+// unlabeled numeric column (real sheet has values like 0.04, 0.2) is never
+// mapped to anything and is just along for the ride. "Break"/"Lunch" rows
+// use the same shape the EOD parser already handles.
+export const CKO_SCHEDULE_ONLY = `,,,,
+,Draft 2026 Ontario Cup - Ontario Championships (Day 1) Schedule,,,
+,Draft Schedule  - Times & events may change,,,
+Race #,Event,Time,
+1,U16 Women's C2 500m Final A,8:00:00 AM,0.2
+2,U16 Men's IC4 500m Final A,8:05:00 AM,0.04
+3,U16 Women's K4 500m Final A,8:10:00 AM,0.04
+,Break,,
+4,U16 Men's K2 500m Final B,8:15:00 AM,0.04
+`
+
+// CKO format: draw tab. Unlike every other format, the race *number* is
+// alone on its own row, one below the "Race,<event>,<time>" header — this
+// fixture keeps that real shape rather than simplifying it away. A per-club
+// overall-standings side table (columns 8+) sits alongside the title rows;
+// this parser only reads columns 0-4, so it's included here to prove that's
+// actually true rather than assumed. The last block is one of the sheet's
+// real trailing "ghost" blocks — pre-formatted but never filled in — which
+// must produce no race at all rather than an empty one.
+export const CKO_RESULTS_ONLY = `,CKO Sprint's Ontario Championships,,,,,,,OVERALL RESULTS,,
+,DAY 1 - SATURDAY AUGUST 15,,,,,,,Balmy Beach,Burloak,Carleton Place
+,Draft Draw  - Times & events may change,,,,,,,0,0,0
+Race,U16 Women's C2 500m Final A,8:00 AM,,,,,,,,,
+1,,,,,,,,,,,,
+Lane,Crew,Club,Finish,Time,,,,,,,,
+0,"Greta Dybinski , Eleanor Blake",Rideau,,,,,,,,,,
+1,Jordan Mavraganis and Kennedy Mavraganis,ORCC,,,,,,,,,,
+2,,,,,,,,,,,,
+,,,,,,,,,,,,
+Race,U16 Men's IC4 500m Final A,8:05 AM,,,,,,,,,
+2,,,,,,,,,,,,
+Lane,Crew,Club,Finish,Time,,,,,,,,
+0,K. Bellerby / M. Kravchuk,MCC,,,,,,,,,,
+1,"Anna Andrus/Chloe Andrus/Zara Dew, Aurora McWilliam",CDBCC,,,,,,,,,,
+,,,,,,,,,,,,
+Race,,,,,,,,,,,,
+,,,,,,,,,,,,
+Lane,Crew,Club,Finish,Time,,,,,,,,
+0,,,,,,,,,,,,
+1,,,,,,,,,,,,
+`
