@@ -1,13 +1,78 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
-import { Archive, ArchiveRestore, ExternalLink, AlertTriangle } from 'lucide-react'
+import { Archive, ArchiveRestore, ExternalLink, AlertTriangle, MoreVertical, Pencil, Trash2 } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
 import { formatDateRange } from '../lib/time'
+import { EditRegattaModal } from './EditRegattaModal'
+import { ConfirmModal } from './ConfirmModal'
+
+function RowMenu({ onEdit, onDelete }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  return (
+    <div ref={containerRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        aria-label="More actions"
+        aria-expanded={isOpen}
+        className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 active:bg-slate-200"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {isOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-10 mt-1 w-40 overflow-hidden rounded-xl border-2 border-slate-200 bg-white shadow-lg"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false)
+              onEdit()
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-slate-700 active:bg-slate-100"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false)
+              onDelete()
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-semibold text-rose-600 active:bg-rose-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function RegattaRow({ regatta, onChanged }) {
-  const { toggleRegattaStatus } = useAdminActions()
+  const { toggleRegattaStatus, deleteRegatta } = useAdminActions()
   const [isToggling, setIsToggling] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleted, setIsDeleted] = useState(false)
   const [error, setError] = useState(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const isActive = regatta.status === 'active'
 
   const handleToggle = async () => {
@@ -21,6 +86,27 @@ function RegattaRow({ regatta, onChanged }) {
     }
     onChanged?.()
   }
+
+  const handleDelete = async () => {
+    setIsConfirmingDelete(false)
+    // Optimistic: hide the row immediately rather than waiting on the round
+    // trip — a delete is simple to roll back visually if it's rejected, and
+    // the whole point of a "strict confirm, then act" flow is that the
+    // decision was already made at the confirm step, not this one.
+    setIsDeleted(true)
+    setIsDeleting(true)
+    setError(null)
+    const { error: deleteError } = await deleteRegatta(regatta.id)
+    setIsDeleting(false)
+    if (deleteError) {
+      setIsDeleted(false)
+      setError(deleteError)
+      return
+    }
+    onChanged?.()
+  }
+
+  if (isDeleted) return null
 
   return (
     <li className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3">
@@ -57,13 +143,37 @@ function RegattaRow({ regatta, onChanged }) {
           {isActive ? <Archive className="h-3.5 w-3.5" /> : <ArchiveRestore className="h-3.5 w-3.5" />}
           {isActive ? 'Archive' : 'Restore'}
         </button>
+        <RowMenu onEdit={() => setIsEditing(true)} onDelete={() => setIsConfirmingDelete(true)} />
       </div>
+
+      {isDeleting && <p className="text-xs font-medium text-slate-400">Deleting…</p>}
 
       {error && (
         <p className="flex items-center gap-1.5 text-xs font-medium text-rose-600">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           {error}
         </p>
+      )}
+
+      {isEditing && (
+        <EditRegattaModal
+          regatta={regatta}
+          onClose={() => setIsEditing(false)}
+          onSaved={() => {
+            setIsEditing(false)
+            onChanged?.()
+          }}
+        />
+      )}
+
+      {isConfirmingDelete && (
+        <ConfirmModal
+          title="Delete regatta"
+          message={`Are you sure you want to permanently delete "${regatta.name}"? This cannot be undone.`}
+          confirmLabel="Delete"
+          onConfirm={handleDelete}
+          onClose={() => setIsConfirmingDelete(false)}
+        />
       )}
     </li>
   )

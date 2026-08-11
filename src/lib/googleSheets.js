@@ -40,3 +40,12 @@ export function buildScheduleCsvUrl(sheetId) {
 export function buildResultsCsvUrl(sheetId, gid) {
   return `${SHEET_BASE}/${sheetId}/export?format=csv&gid=${gid ?? '0'}`
 }
+
+/** Rebuilds a real, pasteable edit-view URL from a regatta's stored
+ * sheet_url/results_gid (only the extracted parts are stored, not the
+ * original URL) — used to pre-fill the edit form's two URL fields so an
+ * admin sees a recognizable link rather than a bare ID. */
+export function buildEditUrl(sheetId, gid) {
+  const base = `${SHEET_BASE}/${sheetId}/edit`
+  return gid && gid !== '0' ? `${base}#gid=${gid}` : base
+}

@@ -29,6 +29,28 @@ export function useAdminActions() {
     return { error: error?.message ?? null }
   }, [])
 
+  const updateRegatta = useCallback(async (id, { name, startDate, endDate, scheduleUrl, resultsUrl }) => {
+    const sheetId = parseSheetId(scheduleUrl)
+    if (!sheetId) return { error: "Couldn't find a Sheet ID in that Schedule Sheet URL" }
+
+    const { error } = await supabase
+      .from('regattas')
+      .update({
+        name,
+        start_date: startDate,
+        end_date: endDate,
+        sheet_url: sheetId,
+        results_gid: parseGid(resultsUrl),
+      })
+      .eq('id', id)
+    return { error: error?.message ?? null }
+  }, [])
+
+  const deleteRegatta = useCallback(async (id) => {
+    const { error } = await supabase.from('regattas').delete().eq('id', id)
+    return { error: error?.message ?? null }
+  }, [])
+
   const addAllowedAdmin = useCallback(async (email) => {
     const trimmed = (email ?? '').trim().toLowerCase()
     if (!EMAIL_RE.test(trimmed)) return { error: 'Enter a valid email address' }
@@ -37,5 +59,5 @@ export function useAdminActions() {
     return { error: error?.message ?? null }
   }, [])
 
-  return { addRegatta, toggleRegattaStatus, addAllowedAdmin }
+  return { addRegatta, toggleRegattaStatus, updateRegatta, deleteRegatta, addAllowedAdmin }
 }

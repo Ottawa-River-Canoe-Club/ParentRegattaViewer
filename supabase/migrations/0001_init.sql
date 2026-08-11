@@ -71,7 +71,7 @@ grant execute on function public.is_admin() to anon, authenticated;
 -- grant to anon/authenticated at all without this, and every query fails
 -- with "permission denied for table X" regardless of the policies below.
 grant select on public.regattas to anon, authenticated;
-grant insert, update on public.regattas to authenticated;
+grant insert, update, delete on public.regattas to authenticated;
 grant select, insert on public.allowed_admins to authenticated;
 
 alter table public.regattas enable row level security;
@@ -98,6 +98,12 @@ create policy "Admins can update regattas"
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
+
+drop policy if exists "Admins can delete regattas" on public.regattas;
+create policy "Admins can delete regattas"
+  on public.regattas for delete
+  to authenticated
+  using (public.is_admin());
 
 -- allowed_admins: never publicly readable or writable — only existing
 -- admins can view or extend the list (checked via is_admin(), not a plain
