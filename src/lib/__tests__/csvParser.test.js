@@ -383,6 +383,46 @@ describe('parseRegattaData — CKO format (Ontario Championships draw)', () => {
     const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
     expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['NBCC', 'PCKC'])
   })
+
+  describe('draw block fallback for a schedule that was split into its own tab (or is missing entirely)', () => {
+    it('reads event, heat, distance, and time straight off the draw block header when there is no schedule tab at all', () => {
+      const { entries } = parseRegattaData('', CKO_RESULTS_ONLY)
+      const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+      expect(race1.event).toBe("U16 Women's C2")
+      expect(race1.heat).toBe('Final A')
+      expect(race1.distance).toBe('500m')
+      expect(race1.time).toBe('8:00 AM')
+    })
+
+    it('still reads the crew data normally when falling back', () => {
+      const { entries } = parseRegattaData('', CKO_RESULTS_ONLY)
+      const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
+      expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['MCC'])
+    })
+
+    it('falls back to column 3 for the time when column 2 is blank instead', () => {
+      const shiftedTimeColumn = CKO_RESULTS_ONLY.replace(
+        "Race,U16 Women's C2 500m Final A,8:00 AM,",
+        "Race,U16 Women's C2 500m Final A,,8:00 AM,",
+      )
+      const { entries } = parseRegattaData('', shiftedTimeColumn)
+      const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+      expect(race1.time).toBe('8:00 AM')
+    })
+
+    it('still prefers the schedule tab\'s own event and time over the draw block\'s when both exist', () => {
+      const scheduleWithDifferentTime = CKO_SCHEDULE_ONLY.replace('8:00:00 AM', '9:30:00 AM')
+      const { entries } = parseRegattaData(scheduleWithDifferentTime, CKO_RESULTS_ONLY)
+      const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+      expect(race1.time).toBe('9:30:00 AM')
+    })
+
+    it('produces no race for the trailing ghost block even without a schedule tab to cross-check against', () => {
+      const { entries } = parseRegattaData('', CKO_RESULTS_ONLY)
+      const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+      expect(raceNumbers).toEqual([1, 2])
+    })
+  })
 })
 
 describe('parseRegattaData — start_race_number override (manual cutoff for a repeated-schedule draw tab)', () => {

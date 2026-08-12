@@ -467,7 +467,16 @@ function parseRideauResultsSection(rows) {
  * schedule (an empty "Race" row with no event name at all) — those are
  * skipped outright, not turned into a race with no name. A per-club overall
  * standings table sits off to the right of every row; since this parser
- * only ever reads columns 0–4 it's never even looked at. */
+ * only ever reads columns 0–4 it's never even looked at.
+ *
+ * The header row's event string and time are kept on the block too, as
+ * `eventName`/`time` (matching the EOD/Rideau block shape) rather than
+ * discarded once the schedule tab's own copy is read — some regattas now
+ * maintain the draw tab entirely separately from the schedule tab (even in
+ * its own spreadsheet), so a race can show up here with no matching
+ * schedule entry at all. mergeSections falls back to these whenever that
+ * happens. Real sheets have put the time in column 2 or column 3
+ * inconsistently, so both are checked. */
 function parseCkoResultsSection(rows) {
   const blocks = []
   let current = null
@@ -489,7 +498,8 @@ function parseCkoResultsSection(rows) {
       pendingBlock = null
       const rawEvent = cells[1] || ''
       if (!rawEvent) continue // an empty template block — nothing was ever filled in
-      pendingBlock = { ...splitCkoEventDetails(rawEvent), time: cells[2] || '' }
+      const { event: eventName, heat, distance } = splitCkoEventDetails(rawEvent)
+      pendingBlock = { eventName, heat, distance, time: cells[2] || cells[3] || '' }
       continue
     }
 
@@ -610,7 +620,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap, startRaceNumber) 
     entries.push({
       type: 'race',
       raceNumber: item.raceNumber,
-      time: sched?.time || '',
+      time: sched?.time || result?.time || '',
       event: sched?.event || result?.eventName || '',
       heat: sched?.heat || result?.heat || '',
       distance: sched?.distance || result?.distance || '',
@@ -630,7 +640,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap, startRaceNumber) 
     entries.push({
       type: 'race',
       raceNumber,
-      time: '',
+      time: result.time || '',
       event: result.eventName || '',
       heat: result.heat || '',
       distance: result.distance || '',
