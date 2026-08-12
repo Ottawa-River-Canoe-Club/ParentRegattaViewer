@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { Sailboat, RefreshCw, AlertTriangle, Archive, ShieldCheck } from 'lucide-react'
+import { RefreshCw, AlertTriangle, Archive, ShieldCheck } from 'lucide-react'
 import { useRegattaList } from '../hooks/useRegattaList'
 import { RegattaListItem } from '../components/RegattaListItem'
 import { EmptyState } from '../components/EmptyState'
+import { OrccLogo } from '../components/OrccLogo'
 
 export function PublicDirectory() {
   const { regattas, isLoading, error, refresh } = useRegattaList()
@@ -20,7 +21,7 @@ export function PublicDirectory() {
       <div className="bg-sky-800 px-4 pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-6 text-white">
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Sailboat className="h-8 w-8" />
+            <OrccLogo className="h-8 w-8" />
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-sky-200">RegattaParent</p>
               <h1 className="text-xl font-bold leading-tight">Regattas</h1>
