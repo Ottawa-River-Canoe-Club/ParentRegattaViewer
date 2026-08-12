@@ -172,6 +172,52 @@ describe('parseRegattaData — club alias normalization', () => {
     const { clubs } = parseRegattaData('', RESULTS_ONLY)
     expect(clubs).toEqual(expect.arrayContaining(['ORCC', 'NBCC']))
   })
+
+  // Clubs and typos added after the original 35-string audit, as they
+  // started showing up in later regattas' sheets.
+  const NEWER_CLUB_RESULTS = `Event,2,U16 MIXED C4,FINAL,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,Skater One,Collingwood,,,
+,2,Skater Two,Pickering Rouge,,,
+,3,Skater Three,Sydenham Lake,,,
+,4,Skater Four,Sydenham Lake Canoe Club,,,
+,5,Skater Five,Ganonoque,,,
+,6,Skater Six,Ottawa Ruiver,,,
+,7,Skater Seven,Petrie Island,,,
+`
+
+  it('normalizes clubs and typos added after the original audit', () => {
+    const { entries } = parseRegattaData('', NEWER_CLUB_RESULTS)
+    const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
+    const clubFor = (laneNumber) => race2.lanes.find((l) => l.laneNumber === laneNumber).clubs[0]
+
+    expect(clubFor('1')).toBe('CPC') // Collingwood Paddle Club
+    expect(clubFor('2')).toBe('PR')
+    expect(clubFor('3')).toBe('SLCC')
+    expect(clubFor('4')).toBe('SLCC')
+    expect(clubFor('5')).toBe('GCC') // typo
+    expect(clubFor('6')).toBe('ORCC') // typo ("Ruiver")
+    expect(clubFor('7')).toBe('PICC')
+  })
+
+  it('includes the newer club acronyms in the unique-club list', () => {
+    const { clubs } = parseRegattaData('', NEWER_CLUB_RESULTS)
+    expect(clubs).toEqual(expect.arrayContaining(['CPC', 'GCC', 'ORCC', 'PICC', 'PR', 'SLCC']))
+  })
+
+  it("keeps Collingwood's new CPC acronym distinct from Carleton Place's unrelated CPC input alias", () => {
+    const bothClubs = `Event,1,U16 MIXED C4,FINAL,500m,,
+,,,,,,
+,LANE,NAME(S),CLUB,TIME,FINISH,POINTS
+,1,Skater One,Collingwood,,,
+,2,Skater Two,CPC,,,
+`
+    const { entries } = parseRegattaData('', bothClubs)
+    const race1 = entries.find((e) => e.type === 'race' && e.raceNumber === 1)
+    expect(race1.lanes.find((l) => l.laneNumber === '1').clubs).toEqual(['CPC'])
+    expect(race1.lanes.find((l) => l.laneNumber === '2').clubs).toEqual(['CPCC'])
+  })
 })
 
 describe('parseRegattaData — Rideau format (age/gender/boat schedule, Lane-marked draw tab)', () => {

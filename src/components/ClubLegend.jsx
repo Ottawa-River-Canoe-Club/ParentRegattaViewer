@@ -27,7 +27,7 @@ export function ClubLegend({ clubs }) {
         <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <ul className="flex flex-col gap-1 border-t border-slate-100 p-2">
+        <ul className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto overscroll-contain border-t border-slate-100 p-2">
           {entries.map(([code, fullName]) => (
             <li key={code} className="flex items-baseline gap-2 rounded-lg bg-slate-50 px-3 py-1.5">
               <span className="shrink-0 text-sm font-bold text-slate-700">{code}</span>

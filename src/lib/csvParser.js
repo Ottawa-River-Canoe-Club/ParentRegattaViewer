@@ -73,6 +73,7 @@ const CLUB_CODES = {
   'RIDEAU CANOE CLUB': 'RCC',
   'OTTAWA RIVER': 'ORCC',
   'OTTAWA RIVER CANOE CLUB': 'ORCC',
+  'OTTAWA RUIVER': 'ORCC', // typo seen in the real sheet
   MISSISSAUGA: 'MCC',
   'MISSISSAUGA CANOE CLUB': 'MCC',
   'CARLETON PLACE': 'CPCC',
@@ -86,6 +87,7 @@ const CLUB_CODES = {
   'COBOURG DISTRICT BOAT AND CANOE CLUB': 'CDBCC',
   GANANOQUE: 'GCC',
   'GANANOQUE CANOE & MOTORBOAT CLUB': 'GCC',
+  GANONOQUE: 'GCC', // typo seen in the real sheet
   PETERBOROUGH: 'PCKC',
   'PETERBOROUGH CANOE AND KAYAK CLUB': 'PCKC',
   SUDBURY: 'SCC',
@@ -95,14 +97,28 @@ const CLUB_CODES = {
   // method applied on faith, not confirmed against an observed abbreviation.
   'SOUTH NIAGARA': 'SNCC',
   'SOUTH NIAGARA CANOE CLUB': 'SNCC',
+
+  // Clubs added after the original 35-string audit, as they started
+  // appearing in later regattas' sheets. SL (Sydenham Lake's 2-letter
+  // shorthand, above) already covered one of Sydenham Lake's aliases.
+  'PICKERING ROUGE': 'PR',
+  'SYDENHAM LAKE': 'SLCC',
+  'SYDENHAM LAKE CANOE CLUB': 'SLCC',
+  'PETRIE ISLAND': 'PICC',
+  // Collingwood Paddle Club's own acronym happens to be "CPC" — unrelated to
+  // the "CPC" input alias above (Carleton Place's typo). The two never
+  // actually collide: that one is only ever consumed as raw input text, and
+  // is never itself produced as an output acronym.
+  COLLINGWOOD: 'CPC',
 }
 
 /** The inverse of CLUB_CODES, for the one place a full name is still wanted
  * — ClubLegend. Built by hand rather than derived from CLUB_CODES because
  * that map is many-aliases-to-one-acronym; this is deliberately one full
- * name per acronym. Acronyms with no confidently-known full name (PICC,
- * SLCC — real codes seen in other regattas' sheets, never expanded anywhere)
- * are left out rather than guessed. */
+ * name per acronym. An acronym is only added here once its full name is
+ * confidently known — anything else (a real code seen in some other
+ * regatta's sheet, never expanded anywhere) is left out rather than
+ * guessed. */
 export const CLUB_LEGEND = {
   BCC: 'Burloak Canoe Club',
   BBCC: 'Balmy Beach Canoe Club',
@@ -117,6 +133,11 @@ export const CLUB_LEGEND = {
   PCKC: 'Peterborough Canoe and Kayak Club',
   SCC: 'Sudbury Canoe Club',
   SNCC: 'South Niagara Canoe Club',
+  CPC: 'Collingwood Paddle Club',
+  PR: 'Pickering Rouge Canoe Club',
+  SLCC: 'Sydenham Lake Canoe Club',
+  PICC: 'Petrie Island Canoe Club',
+  EXH: 'Exhibition (Non-Scoring)',
 }
 
 function normalizeClub(club) {
@@ -655,24 +676,24 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap, startRaceNumber) 
 }
 
 /** Collects every individual club code referenced across all lanes, sorted
- * alphabetically, for the dedicated club-filter UI. Interclub crews (CLUB =
- * "ORCC/CPCC") are split on "/" so each component club becomes its own entry
- * rather than one compound one — otherwise the filter chips couldn't
- * distinguish a boat's clubs from each other, and a chip for "ORCC" wouldn't
- * find boats where ORCC is only part of a mixed crew. Each piece also passes
- * through normalizeClub so a shortened alias (e.g. "OR") collapses into the
- * same chip as its canonical code ("ORCC") rather than getting its own. */
+ * alphabetically, for the dedicated club-filter UI. Every lane's `clubs`
+ * array is already split into individual codes and run through normalizeClub
+ * by whichever format parser built it (parseResultsSection /
+ * parseRideauResultsSection / parseCkoResultsSection all split an interclub
+ * crew's "ORCC/CPCC" cell and normalize each piece before it ever reaches a
+ * lane) — re-splitting or re-normalizing here would be redundant at best,
+ * and actively wrong at worst: normalizeClub isn't idempotent whenever a
+ * club's own canonical acronym happens to also be a *different* club's
+ * raw-input alias (Collingwood's "CPC" vs. Carleton Place's "CPC" typo
+ * alias — a second pass would collapse Collingwood's own code straight into
+ * "CPCC"). */
 function extractUniqueClubs(entries) {
   const clubSet = new Set()
   for (const entry of entries) {
     if (entry.type !== 'race') continue
     for (const lane of entry.lanes) {
-      for (const rawClub of lane.clubs) {
-        rawClub
-          .split('/')
-          .map((c) => normalizeClub(c))
-          .filter(Boolean)
-          .forEach((c) => clubSet.add(c))
+      for (const club of lane.clubs) {
+        if (club) clubSet.add(club)
       }
     }
   }

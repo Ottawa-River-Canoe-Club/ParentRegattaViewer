@@ -6,7 +6,7 @@ afterEach(cleanup)
 
 describe('ClubLegend', () => {
   it('renders nothing when none of the given clubs have a known full name', () => {
-    const { container } = render(<ClubLegend clubs={['PICC', 'SLCC']} />)
+    const { container } = render(<ClubLegend clubs={['ZZZ', 'QQQ']} />)
     expect(container.innerHTML).toBe('')
   })
 
@@ -39,9 +39,28 @@ describe('ClubLegend', () => {
   })
 
   it('skips an unknown acronym but still shows the ones it does recognize', () => {
-    render(<ClubLegend clubs={['ORCC', 'PICC']} />)
+    render(<ClubLegend clubs={['ORCC', 'ZZZ']} />)
     fireEvent.click(screen.getByRole('button'))
     expect(screen.getByText('Ottawa River Canoe Club')).toBeTruthy()
-    expect(screen.queryByText('PICC')).toBeNull()
+    expect(screen.queryByText('ZZZ')).toBeNull()
+  })
+
+  it('explains every newer club acronym added alongside the original set', () => {
+    render(<ClubLegend clubs={['CPC', 'PR', 'SLCC', 'PICC', 'EXH']} />)
+    fireEvent.click(screen.getByRole('button'))
+    expect(screen.getByText('Collingwood Paddle Club')).toBeTruthy()
+    expect(screen.getByText('Pickering Rouge Canoe Club')).toBeTruthy()
+    expect(screen.getByText('Sydenham Lake Canoe Club')).toBeTruthy()
+    expect(screen.getByText('Petrie Island Canoe Club')).toBeTruthy()
+    expect(screen.getByText('Exhibition (Non-Scoring)')).toBeTruthy()
+  })
+
+  it('caps the expanded list height and scrolls it internally instead of the page', () => {
+    render(<ClubLegend clubs={['ORCC', 'RCC']} />)
+    fireEvent.click(screen.getByRole('button'))
+    const list = screen.getByRole('list')
+    expect(list.className).toMatch(/max-h-/)
+    expect(list.className).toContain('overflow-y-auto')
+    expect(list.className).toContain('overscroll-contain')
   })
 })
