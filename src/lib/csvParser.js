@@ -571,27 +571,36 @@ function applyCkoEventSplit(scheduleMap) {
   }
 }
 
-function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
+/** `startRaceNumber` is an optional, organizer-set cutoff (see
+ * AdminRegattaForm's "Start Race Number" field) for a sheet like CKO's Day 2
+ * draw tab, which repeats the *entire* weekend's schedule at the top but
+ * only carries draws from Day 2's first race onward. An earlier version of
+ * this function tried to infer that cutoff automatically, from the lowest
+ * race number with an actual draw — but real sheets carry enough ghost rows
+ * and typos in the draw tab to make that number unreliable, so the cutoff is
+ * now only ever applied when an organizer has explicitly set one. When set,
+ * every race below it is dropped outright — whether it's schedule-only,
+ * draw-only, or drawn — rather than rendered as "Not Yet Drawn". Any
+ * break/divider that appears before the first race that survives the cutoff
+ * is dropped too, since it's a leftover from the discarded portion of the
+ * schedule with nothing of its own left to divide. */
+function mergeSections(scheduleOrder, scheduleMap, resultsMap, startRaceNumber) {
   const entries = []
   const consumed = new Set()
-
-  // CKO's Day 2 draw tab repeats the *entire* weekend's schedule at the top
-  // but only carries draws from Day 2's first race onward — so anything
-  // scheduled earlier than that is a Day 1 leftover with no result, not a
-  // legitimately-undrawn race. Drop those rather than rendering them as
-  // "Not Yet Drawn". Races above the minimum with no result are unaffected
-  // (they're upcoming later-in-day races, drawn or not). Single-day formats
-  // never trigger this: their earliest drawn race is 1, so nothing scheduled
-  // is ever below it.
-  const minDrawnRace = resultsMap.size > 0 ? Math.min(...resultsMap.keys()) : -Infinity
+  const hasOverride = Number.isInteger(startRaceNumber)
+  let sawSurvivingRace = false
 
   for (const item of scheduleOrder) {
+    if (hasOverride) {
+      if (item.type === 'race' && item.raceNumber < startRaceNumber) continue
+      if (item.type === 'break' && !sawSurvivingRace) continue
+      if (item.type === 'race') sawSurvivingRace = true
+    }
+
     if (item.type === 'break') {
       entries.push({ type: 'break', label: item.label, day: item.day })
       continue
     }
-
-    if (!resultsMap.has(item.raceNumber) && item.raceNumber < minDrawnRace) continue
 
     const sched = scheduleMap.get(item.raceNumber)
     const result = resultsMap.get(item.raceNumber)
@@ -614,6 +623,7 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
 
   const extras = [...resultsMap.entries()]
     .filter(([raceNumber]) => !consumed.has(raceNumber))
+    .filter(([raceNumber]) => !hasOverride || raceNumber >= startRaceNumber)
     .sort((a, b) => a[0] - b[0])
 
   for (const [raceNumber, result] of extras) {
@@ -668,8 +678,11 @@ function extractUniqueClubs(entries) {
  * the first place (see detectFormat), since different organizing clubs lay
  * their schedule/draw sheets out with entirely different columns, not just
  * different header spelling.
+ *
+ * `startRaceNumber` is the regatta's optional manual override (see
+ * mergeSections) for a draw tab that doesn't start at Race 1.
  */
-export function parseRegattaData(scheduleCsvText, resultsCsvText) {
+export function parseRegattaData(scheduleCsvText, resultsCsvText, startRaceNumber) {
   const { data: scheduleRows } = Papa.parse(scheduleCsvText ?? '', { skipEmptyLines: false })
   const { data: resultsRows } = Papa.parse(resultsCsvText ?? '', { skipEmptyLines: false })
 
@@ -688,7 +701,7 @@ export function parseRegattaData(scheduleCsvText, resultsCsvText) {
     resultsMap = parseResultsSection(resultsRows)
   }
 
-  const entries = mergeSections(scheduleOrder, scheduleMap, resultsMap)
+  const entries = mergeSections(scheduleOrder, scheduleMap, resultsMap, startRaceNumber)
   const clubs = extractUniqueClubs(entries)
 
   return { title, entries, parsedAt: Date.now(), clubs }

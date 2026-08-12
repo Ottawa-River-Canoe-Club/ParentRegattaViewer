@@ -23,7 +23,7 @@ async function fetchCsv(url, signal) {
  * switching regattas — it assumes regattaId/sheetId/resultsGid are stable for
  * its whole mounted lifetime, so cached data never leaks between regattas.
  */
-export function useRegattaData(regattaId, sheetId, resultsGid) {
+export function useRegattaData(regattaId, sheetId, resultsGid, startRaceNumber) {
   const cachedRef = useRef(undefined)
   if (cachedRef.current === undefined) cachedRef.current = loadCache(regattaId)
   const cached = cachedRef.current
@@ -50,7 +50,7 @@ export function useRegattaData(regattaId, sheetId, resultsGid) {
         fetchCsv(buildResultsCsvUrl(sheetId, resultsGid), controller.signal),
       ])
 
-      const parsed = parseRegattaData(scheduleText, resultsText)
+      const parsed = parseRegattaData(scheduleText, resultsText, startRaceNumber)
       setData(parsed)
       setLastUpdated(parsed.parsedAt)
       setIsOffline(false)
@@ -64,7 +64,7 @@ export function useRegattaData(regattaId, sheetId, resultsGid) {
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [regattaId, sheetId, resultsGid])
+  }, [regattaId, sheetId, resultsGid, startRaceNumber])
 
   useEffect(() => {
     if (!sheetId) return

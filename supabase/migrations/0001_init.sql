@@ -44,6 +44,14 @@ set start_date = coalesce(start_date, date),
     end_date = coalesce(end_date, date)
 where start_date is null or end_date is null;
 
+-- Manual escape hatch for a sheet whose draw tab doesn't start at Race 1
+-- (e.g. CKO's Day 2 tab, which repeats the *entire* weekend's schedule up
+-- top but only carries draws from Day 2's first race onward). Auto-detecting
+-- that cutoff from the lowest drawn race number turned out to be unreliable
+-- against real sheets (ghost rows, typos), so it's a deliberate, organizer-set
+-- value instead. Nullable: most regattas never need it.
+alter table public.regattas add column if not exists start_race_number integer;
+
 create table if not exists public.allowed_admins (
   email citext primary key,
   created_at timestamptz not null default now()

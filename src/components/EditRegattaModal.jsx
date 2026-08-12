@@ -11,6 +11,7 @@ function formFromRegatta(regatta) {
     endDate: regatta.end_date ?? regatta.date ?? '',
     scheduleUrl: buildEditUrl(regatta.sheet_url),
     resultsUrl: buildEditUrl(regatta.sheet_url, regatta.results_gid),
+    startRaceNumber: regatta.start_race_number ?? '',
   }
 }
 
@@ -107,6 +108,22 @@ export function EditRegattaModal({ regatta, onSaved, onClose }) {
             onChange={setField('resultsUrl')}
             className="h-11 rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
           />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-sm font-semibold text-slate-600">Start Race Number</span>
+          <input
+            type="number"
+            min="1"
+            value={form.startRaceNumber}
+            onChange={setField('startRaceNumber')}
+            placeholder="e.g. 93"
+            className="h-11 rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
+          />
+          <span className="text-xs font-medium text-slate-400">
+            Optional. Set this only if the draw tab doesn't start at Race 1 — races numbered below it are
+            discarded entirely.
+          </span>
         </label>
 
         {error && (

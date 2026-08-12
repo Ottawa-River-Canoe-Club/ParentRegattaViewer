@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, AlertTriangle } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
 
-const EMPTY_FORM = { name: '', startDate: '', endDate: '', scheduleUrl: '', resultsUrl: '' }
+const EMPTY_FORM = { name: '', startDate: '', endDate: '', scheduleUrl: '', resultsUrl: '', startRaceNumber: '' }
 export const DRAFT_KEY = 'regattaparent:draft:add-regatta:v1'
 
 const isBlankForm = (form) => Object.values(form).every((value) => !value)
@@ -136,6 +136,22 @@ export function AdminRegattaForm({ onAdded }) {
         />
         <span className="text-xs font-medium text-slate-400">
           Paste the URL from your browser's address bar while viewing the draw/results tab.
+        </span>
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-sm font-semibold text-slate-600">Start Race Number</span>
+        <input
+          type="number"
+          min="1"
+          value={form.startRaceNumber}
+          onChange={setField('startRaceNumber')}
+          placeholder="e.g. 93"
+          className="h-11 rounded-xl border-2 border-slate-200 px-3 text-base focus:border-sky-600 focus:outline-none"
+        />
+        <span className="text-xs font-medium text-slate-400">
+          Optional. Set this only if the draw tab doesn't start at Race 1 (e.g. a Day 2 tab that repeats the
+          whole weekend's schedule) — races numbered below it are discarded entirely.
         </span>
       </label>
 

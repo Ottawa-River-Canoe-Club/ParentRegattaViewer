@@ -385,30 +385,60 @@ describe('parseRegattaData — CKO format (Ontario Championships draw)', () => {
   })
 })
 
-describe('parseRegattaData — CKO Day 2 (schedule tab repeats the full weekend, draw tab does not)', () => {
-  it('discards schedule-only races numbered below the earliest drawn race', () => {
+describe('parseRegattaData — start_race_number override (manual cutoff for a repeated-schedule draw tab)', () => {
+  // A prior version of mergeSections tried to infer this cutoff automatically
+  // from the lowest race number with an actual draw, but real sheets had
+  // enough ghost rows/typos in the draw tab to throw that number off — so
+  // there is no filtering at all unless an organizer has explicitly set one.
+  it('applies no filtering when no override is given, even for a schedule that repeats a prior day', () => {
     const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
     const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
-    expect(raceNumbers).not.toContain(1)
-    expect(raceNumbers).not.toContain(2)
+    expect(raceNumbers).toEqual([1, 2, 93, 94, 95])
   })
 
-  it('keeps a schedule-only race numbered above the earliest drawn race as legitimately not-yet-drawn', () => {
-    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
+  it('discards every race below the override, whether schedule-only, draw-only, or actually drawn', () => {
+    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS, 93)
+    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+    expect(raceNumbers).toEqual([93, 94, 95])
+    expect(entries.find((e) => e.type === 'race' && e.raceNumber === 93).hasDraw).toBe(true)
+  })
+
+  it('keeps a race at or above the override even when it has no draw yet', () => {
+    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS, 93)
     const race95 = entries.find((e) => e.type === 'race' && e.raceNumber === 95)
     expect(race95).toBeDefined()
     expect(race95.hasDraw).toBe(false)
     expect(race95.event).toBe("U14 Men's K1")
   })
 
-  it('still shows the races that were actually drawn', () => {
-    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
-    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
-    expect(raceNumbers).toEqual([93, 94, 95])
+  it('drops a break/divider that sits entirely within the discarded portion of the schedule', () => {
+    const scheduleWithLeadingBreak = CKO_DAY2_SCHEDULE.replace(
+      "2,U16 Men's IC4 500m Final A,8:05:00 AM,\n",
+      "2,U16 Men's IC4 500m Final A,8:05:00 AM,\n,Lunch,,\n",
+    )
+    const { entries } = parseRegattaData(scheduleWithLeadingBreak, CKO_DAY2_RESULTS, 93)
+    expect(entries.some((e) => e.type === 'break')).toBe(false)
   })
 
-  it('leaves single-day CKO regattas untouched, since their earliest drawn race is already 1', () => {
-    const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, CKO_RESULTS_ONLY)
+  it('keeps a break/divider that sits after the override cutoff', () => {
+    const scheduleWithTrailingBreak = CKO_DAY2_SCHEDULE.replace(
+      "94,U14 Women's C1 500m Final A,9:05:00 AM,\n",
+      "94,U14 Women's C1 500m Final A,9:05:00 AM,\n,Lunch,,\n",
+    )
+    const { entries } = parseRegattaData(scheduleWithTrailingBreak, CKO_DAY2_RESULTS, 93)
+    const breakEntry = entries.find((e) => e.type === 'break')
+    expect(breakEntry).toBeDefined()
+    expect(breakEntry.label).toBe('Lunch')
+  })
+
+  it('leaves a single-day CKO regatta unaffected by an override of 1', () => {
+    const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, CKO_RESULTS_ONLY, 1)
+    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+    expect(raceNumbers).toEqual([1, 2, 3, 4])
+  })
+
+  it('leaves every format untouched when no override is set', () => {
+    const { entries } = parseRegattaData(SCHEDULE_ONLY, RESULTS_ONLY)
     const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
     expect(raceNumbers).toEqual([1, 2, 3, 4])
   })

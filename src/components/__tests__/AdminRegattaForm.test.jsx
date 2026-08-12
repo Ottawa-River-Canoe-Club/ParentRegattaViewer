@@ -153,4 +153,58 @@ describe('AdminRegattaForm', () => {
     const saved = JSON.parse(localStorage.getItem(DRAFT_KEY))
     expect(saved.name).toBe('Test Regatta')
   })
+
+  it('renders an optional Start Race Number input', () => {
+    render(<AdminRegattaForm />)
+    const input = screen.getByLabelText('Start Race Number', { exact: false })
+    expect(input).toBeTruthy()
+    expect(input.required).toBe(false)
+  })
+
+  it('submits the start race number when the organizer sets one', async () => {
+    render(<AdminRegattaForm />)
+    fillCommonFields()
+    fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-08-15' } })
+    fireEvent.change(screen.getByLabelText('Start Race Number', { exact: false }), { target: { value: '93' } })
+    fireEvent.click(screen.getByRole('button', { name: /add regatta/i }))
+
+    await vi.waitFor(() => expect(addRegatta).toHaveBeenCalledTimes(1))
+    expect(addRegatta.mock.calls[0][0].startRaceNumber).toBe('93')
+  })
+
+  it('submits with no start race number when the field is left blank', async () => {
+    render(<AdminRegattaForm />)
+    fillCommonFields()
+    fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-08-15' } })
+    fireEvent.click(screen.getByRole('button', { name: /add regatta/i }))
+
+    await vi.waitFor(() => expect(addRegatta).toHaveBeenCalledTimes(1))
+    expect(addRegatta.mock.calls[0][0].startRaceNumber).toBe('')
+  })
+
+  it('restores a saved start race number from draft', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        name: 'Draft Regatta',
+        startDate: '2026-08-15',
+        endDate: '2026-08-16',
+        scheduleUrl: 'https://docs.google.com/spreadsheets/d/abc123/edit',
+        resultsUrl: 'https://docs.google.com/spreadsheets/d/abc123/edit#gid=456',
+        startRaceNumber: '93',
+      }),
+    )
+    render(<AdminRegattaForm />)
+    expect(screen.getByLabelText('Start Race Number', { exact: false }).value).toBe('93')
+  })
+
+  it('clears the start race number after a successful submission', async () => {
+    render(<AdminRegattaForm />)
+    fillCommonFields()
+    fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-08-15' } })
+    fireEvent.change(screen.getByLabelText('Start Race Number', { exact: false }), { target: { value: '93' } })
+    fireEvent.click(screen.getByRole('button', { name: /add regatta/i }))
+
+    await vi.waitFor(() => expect(screen.getByLabelText('Start Race Number', { exact: false }).value).toBe(''))
+  })
 })

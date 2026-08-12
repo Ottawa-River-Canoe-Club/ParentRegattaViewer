@@ -14,6 +14,7 @@ const REGATTA = {
   end_date: '2026-08-16',
   sheet_url: 'abc123',
   results_gid: '456',
+  start_race_number: 93,
 }
 
 describe('EditRegattaModal', () => {
@@ -33,12 +34,28 @@ describe('EditRegattaModal', () => {
     expect(screen.getByLabelText('Results Tab URL').value).toBe(
       'https://docs.google.com/spreadsheets/d/abc123/edit#gid=456',
     )
+    expect(screen.getByLabelText('Start Race Number', { exact: false }).value).toBe('93')
   })
 
   it('falls back to the legacy single date column when start_date/end_date are absent', () => {
     render(<EditRegattaModal regatta={{ ...REGATTA, start_date: null, end_date: null, date: '2026-08-15' }} onSaved={vi.fn()} onClose={vi.fn()} />)
     expect(screen.getByLabelText('Start Date').value).toBe('2026-08-15')
     expect(screen.getByLabelText('End Date').value).toBe('2026-08-15')
+  })
+
+  it('leaves Start Race Number blank when the regatta has no override set', () => {
+    render(<EditRegattaModal regatta={{ ...REGATTA, start_race_number: null }} onSaved={vi.fn()} onClose={vi.fn()} />)
+    expect(screen.getByLabelText('Start Race Number', { exact: false }).value).toBe('')
+  })
+
+  it('submits an updated start race number', async () => {
+    render(<EditRegattaModal regatta={REGATTA} onSaved={vi.fn()} onClose={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Start Race Number', { exact: false }), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+
+    await vi.waitFor(() => expect(updateRegatta).toHaveBeenCalledTimes(1))
+    const [, fields] = updateRegatta.mock.calls[0]
+    expect(fields.startRaceNumber).toBe('100')
   })
 
   it('calls updateRegatta with the regatta id and the edited fields on submit', async () => {

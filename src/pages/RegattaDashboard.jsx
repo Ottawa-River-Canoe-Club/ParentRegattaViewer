@@ -34,6 +34,7 @@ function RegattaDashboardForId({ regattaId }) {
     regattaId,
     regatta?.sheet_url,
     regatta?.results_gid,
+    regatta?.start_race_number,
   )
 
   const [searchInput, setSearchInput] = useState('')
