@@ -10,6 +10,8 @@ import {
   MULTI_DAY_RESULTS,
   CKO_SCHEDULE_ONLY,
   CKO_RESULTS_ONLY,
+  CKO_DAY2_SCHEDULE,
+  CKO_DAY2_RESULTS,
 } from './fixtures'
 
 describe('parseRegattaData — schedule tab (matches the real live sheet today)', () => {
@@ -380,5 +382,34 @@ describe('parseRegattaData — CKO format (Ontario Championships draw)', () => {
     const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, commaInterclub)
     const race2 = entries.find((e) => e.type === 'race' && e.raceNumber === 2)
     expect(race2.lanes.find((l) => l.laneNumber === '0').clubs).toEqual(['NBCC', 'PCKC'])
+  })
+})
+
+describe('parseRegattaData — CKO Day 2 (schedule tab repeats the full weekend, draw tab does not)', () => {
+  it('discards schedule-only races numbered below the earliest drawn race', () => {
+    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
+    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+    expect(raceNumbers).not.toContain(1)
+    expect(raceNumbers).not.toContain(2)
+  })
+
+  it('keeps a schedule-only race numbered above the earliest drawn race as legitimately not-yet-drawn', () => {
+    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
+    const race95 = entries.find((e) => e.type === 'race' && e.raceNumber === 95)
+    expect(race95).toBeDefined()
+    expect(race95.hasDraw).toBe(false)
+    expect(race95.event).toBe("U14 Men's K1")
+  })
+
+  it('still shows the races that were actually drawn', () => {
+    const { entries } = parseRegattaData(CKO_DAY2_SCHEDULE, CKO_DAY2_RESULTS)
+    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+    expect(raceNumbers).toEqual([93, 94, 95])
+  })
+
+  it('leaves single-day CKO regattas untouched, since their earliest drawn race is already 1', () => {
+    const { entries } = parseRegattaData(CKO_SCHEDULE_ONLY, CKO_RESULTS_ONLY)
+    const raceNumbers = entries.filter((e) => e.type === 'race').map((e) => e.raceNumber)
+    expect(raceNumbers).toEqual([1, 2, 3, 4])
   })
 })

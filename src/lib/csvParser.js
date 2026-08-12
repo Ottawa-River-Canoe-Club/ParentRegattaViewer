@@ -575,11 +575,23 @@ function mergeSections(scheduleOrder, scheduleMap, resultsMap) {
   const entries = []
   const consumed = new Set()
 
+  // CKO's Day 2 draw tab repeats the *entire* weekend's schedule at the top
+  // but only carries draws from Day 2's first race onward — so anything
+  // scheduled earlier than that is a Day 1 leftover with no result, not a
+  // legitimately-undrawn race. Drop those rather than rendering them as
+  // "Not Yet Drawn". Races above the minimum with no result are unaffected
+  // (they're upcoming later-in-day races, drawn or not). Single-day formats
+  // never trigger this: their earliest drawn race is 1, so nothing scheduled
+  // is ever below it.
+  const minDrawnRace = resultsMap.size > 0 ? Math.min(...resultsMap.keys()) : -Infinity
+
   for (const item of scheduleOrder) {
     if (item.type === 'break') {
       entries.push({ type: 'break', label: item.label, day: item.day })
       continue
     }
+
+    if (!resultsMap.has(item.raceNumber) && item.raceNumber < minDrawnRace) continue
 
     const sched = scheduleMap.get(item.raceNumber)
     const result = resultsMap.get(item.raceNumber)

@@ -154,3 +154,33 @@ Lane,Crew,Club,Finish,Time,,,,,,,,
 0,,,,,,,,,,,,
 1,,,,,,,,,,,,
 `
+
+// CKO's Day 2 schedule tab: the real sheet repeats the *entire* weekend's
+// schedule (Races 1-171) at the top of the Day 2 tab, but the Day 2 draw tab
+// only ever carries draws from Race 93 onward. Reproduced here at a smaller
+// scale — races 1-2 stand in for "earlier in the weekend, already drawn on
+// the Day 1 tab", and 93-95 stand in for Day 2's own races.
+export const CKO_DAY2_SCHEDULE = `,,,,
+,Draft 2026 Ontario Cup - Ontario Championships (Day 2) Schedule,,,
+Race #,Event,Time,
+1,U16 Women's C2 500m Final A,8:00:00 AM,
+2,U16 Men's IC4 500m Final A,8:05:00 AM,
+93,U14 Men's C1 500m Final A,9:00:00 AM,
+94,U14 Women's C1 500m Final A,9:05:00 AM,
+95,U14 Men's K1 500m Final A,9:10:00 AM,
+`
+
+// CKO's Day 2 draw tab: only Races 93-94 have been drawn so far. Race 95 is
+// legitimately upcoming (not yet drawn) and must still show up; Races 1-2
+// must not, since they belong to Day 1 and were only pulled in by the
+// schedule tab's full-weekend repeat.
+export const CKO_DAY2_RESULTS = `Race,U14 Men's C1 500m Final A,9:00 AM,,,
+93,,,,,
+Lane,Crew,Club,Finish,Time,
+0,Skater One,ORCC,,,
+,,,,,
+Race,U14 Women's C1 500m Final A,9:05 AM,,,
+94,,,,,
+Lane,Crew,Club,Finish,Time,
+0,Skater Two,CPCC,,,
+`
