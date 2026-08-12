@@ -1,11 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { AdminRegattaForm } from '../AdminRegattaForm'
+import { AdminRegattaForm, DRAFT_KEY } from '../AdminRegattaForm'
 import { useAdminActions } from '../../hooks/useAdminActions'
 
 vi.mock('../../hooks/useAdminActions')
 
 afterEach(cleanup)
+
+// Every test gets a fresh drawer — jsdom's localStorage otherwise persists
+// across tests in this file, so a draft saved by one test would silently
+// pre-fill the next one's "blank form" assumptions.
+beforeEach(() => localStorage.clear())
 
 function fillCommonFields() {
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Regatta' } })
@@ -92,5 +97,60 @@ describe('AdminRegattaForm', () => {
 
     await screen.findByText("Couldn't find a Sheet ID in that Schedule Sheet URL")
     expect(screen.getByLabelText('Start Date').value).toBe('2026-08-15')
+  })
+
+  it('saves the draft to localStorage as the admin types', () => {
+    render(<AdminRegattaForm />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Test Regatta' } })
+
+    const saved = JSON.parse(localStorage.getItem(DRAFT_KEY))
+    expect(saved.name).toBe('Test Regatta')
+  })
+
+  it('restores a saved draft when the form mounts', () => {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({
+        name: 'Draft Regatta',
+        startDate: '2026-08-15',
+        endDate: '2026-08-16',
+        scheduleUrl: 'https://docs.google.com/spreadsheets/d/abc123/edit',
+        resultsUrl: 'https://docs.google.com/spreadsheets/d/abc123/edit#gid=456',
+      }),
+    )
+
+    render(<AdminRegattaForm />)
+
+    expect(screen.getByLabelText('Name').value).toBe('Draft Regatta')
+    expect(screen.getByLabelText('Start Date').value).toBe('2026-08-15')
+    expect(screen.getByLabelText('End Date').value).toBe('2026-08-16')
+  })
+
+  it('ignores a corrupted draft instead of crashing on mount', () => {
+    localStorage.setItem(DRAFT_KEY, '{not valid json')
+    render(<AdminRegattaForm />)
+    expect(screen.getByLabelText('Name').value).toBe('')
+  })
+
+  it('clears the saved draft from localStorage after a successful submission', async () => {
+    render(<AdminRegattaForm />)
+    fillCommonFields()
+    fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-08-15' } })
+    fireEvent.click(screen.getByRole('button', { name: /add regatta/i }))
+
+    await vi.waitFor(() => expect(screen.getByLabelText('Name').value).toBe(''))
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull()
+  })
+
+  it('keeps the saved draft in localStorage when submission fails', async () => {
+    addRegatta.mockResolvedValue({ error: "Couldn't find a Sheet ID in that Schedule Sheet URL" })
+    render(<AdminRegattaForm />)
+    fillCommonFields()
+    fireEvent.change(screen.getByLabelText('Start Date'), { target: { value: '2026-08-15' } })
+    fireEvent.click(screen.getByRole('button', { name: /add regatta/i }))
+
+    await screen.findByText("Couldn't find a Sheet ID in that Schedule Sheet URL")
+    const saved = JSON.parse(localStorage.getItem(DRAFT_KEY))
+    expect(saved.name).toBe('Test Regatta')
   })
 })

@@ -1,14 +1,47 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Plus, AlertTriangle } from 'lucide-react'
 import { useAdminActions } from '../hooks/useAdminActions'
 
 const EMPTY_FORM = { name: '', startDate: '', endDate: '', scheduleUrl: '', resultsUrl: '' }
+export const DRAFT_KEY = 'regattaparent:draft:add-regatta:v1'
+
+const isBlankForm = (form) => Object.values(form).every((value) => !value)
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (!raw) return EMPTY_FORM
+    const parsed = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return EMPTY_FORM
+    return { ...EMPTY_FORM, ...parsed }
+  } catch {
+    return EMPTY_FORM
+  }
+}
 
 export function AdminRegattaForm({ onAdded }) {
   const { addRegatta } = useAdminActions()
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(loadDraft)
   const [error, setError] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Persist as-you-type so backgrounding the tab (e.g. to go copy a Sheet
+  // URL) can't lose progress — mobile browsers reclaim memory from
+  // background tabs and reload them from scratch on return. A blank form
+  // is treated as "no draft" so resetting to EMPTY_FORM after a successful
+  // submit clears storage through this same effect, rather than a separate
+  // clear call racing this one.
+  useEffect(() => {
+    try {
+      if (isBlankForm(form)) {
+        localStorage.removeItem(DRAFT_KEY)
+      } else {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(form))
+      }
+    } catch {
+      // Best-effort only — private browsing / quota limits shouldn't break the app.
+    }
+  }, [form])
 
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
