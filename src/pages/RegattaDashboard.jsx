@@ -10,6 +10,7 @@ import { buildOverallRankings } from '../lib/rankings'
 import { isWithinRegattaWindow } from '../lib/regattaWindow'
 import { StatusHeader } from '../components/StatusHeader'
 import { SearchBar } from '../components/SearchBar'
+import { AthleteFilterChips } from '../components/AthleteFilterChips'
 import { ClubFilterChips } from '../components/ClubFilterChips'
 import { ClubLegend } from '../components/ClubLegend'
 import { FilterChips } from '../components/FilterChips'
@@ -39,7 +40,7 @@ function RegattaDashboardForId({ regattaId }) {
 
   const [searchInput, setSearchInput] = useState('')
   const [filterMode, setFilterMode] = useState('all')
-  const [selectedIdentity, setSelectedIdentity] = useState(null)
+  const [selectedAthletes, setSelectedAthletes] = useState([])
   const [selectedClubs, setSelectedClubs] = useState(() => new Set())
   const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [selectedDay, setSelectedDay] = useState(null)
@@ -57,9 +58,18 @@ function RegattaDashboardForId({ regattaId }) {
   // true→false cycle batched into one commit that never renders `true`.
   const initialDataRef = useRef(data)
 
-  const handleSearchChange = (value) => {
-    setSearchInput(value)
-    setSelectedIdentity(null)
+  // Selecting from the dropdown adds a persistent chip and instantly clears
+  // the search box (see the DisambiguationPrompt `candidates` prop below,
+  // which is gated on this same searchInput so the dropdown disappears in
+  // the same tick rather than lagging behind the 150ms debounce). Deduped by
+  // id so re-picking an already-selected athlete is a harmless no-op.
+  const handleSelectAthlete = (candidate) => {
+    setSelectedAthletes((prev) => (prev.some((a) => a.id === candidate.id) ? prev : [...prev, candidate]))
+    setSearchInput('')
+  }
+
+  const handleRemoveAthlete = (id) => {
+    setSelectedAthletes((prev) => prev.filter((a) => a.id !== id))
   }
 
   const toggleClub = (club) => {
@@ -72,7 +82,7 @@ function RegattaDashboardForId({ regattaId }) {
   }
 
   const hasActiveClubFilter = selectedClubs.size > 0
-  const hasActiveFilter = debouncedQuery.trim() !== '' || !!selectedIdentity || hasActiveClubFilter
+  const hasActiveFilter = debouncedQuery.trim() !== '' || selectedAthletes.length > 0 || hasActiveClubFilter
 
   // Typing a search or tapping a club chip instantly filters (per spec);
   // jumping back to "All Races" manually is still respected once the user
@@ -159,14 +169,14 @@ function RegattaDashboardForId({ regattaId }) {
     [searchIndex, debouncedQuery],
   )
   // So a parent who collapsed the panel can still tell there's something in
-  // it worth reopening for — a club filter still narrowing results, or a
-  // name match still waiting to be disambiguated.
-  const hasHiddenFilterState = hasActiveClubFilter || disambiguationCandidates.length >= 2
+  // it worth reopening for — a club filter still narrowing results, an
+  // athlete chip already selected, or a name match still waiting to be added.
+  const hasHiddenFilterState = hasActiveClubFilter || selectedAthletes.length > 0 || disambiguationCandidates.length > 0
 
   const annotatedEntries = useMemo(() => {
     if (!entries) return null
-    return annotateEntries(entries, { query: debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs })
-  }, [entries, debouncedQuery, selectedIdentity, matchedNameSet, selectedClubs])
+    return annotateEntries(entries, { query: debouncedQuery, selectedAthletes, matchedNameSet, selectedClubs })
+  }, [entries, debouncedQuery, selectedAthletes, matchedNameSet, selectedClubs])
 
   // Independent of search/club filters by design — the whole point of this
   // tab is to show the full qualification picture across all heats, not a
@@ -200,15 +210,16 @@ function RegattaDashboardForId({ regattaId }) {
       emptyState = { title: 'Type a name or tap a club to filter', message: 'Try an athlete name or select a club below.' }
     } else if (filterMode === 'filtered') {
       const clubList = [...selectedClubs].join(', ')
-      if (searchInput.trim() && hasActiveClubFilter) {
+      const nameLabel = [...selectedAthletes.map((a) => a.name), searchInput.trim()].filter(Boolean).join(', ')
+      if (nameLabel && hasActiveClubFilter) {
         emptyState = {
           title: 'No races found',
-          message: `Nobody matching "${searchInput}" from ${clubList} is in today's schedule.`,
+          message: `No races for "${nameLabel}" or ${clubList} in today's schedule.`,
         }
       } else if (hasActiveClubFilter) {
         emptyState = { title: 'No races found', message: `No one from ${clubList} is in today's schedule.` }
       } else {
-        emptyState = { title: 'No races found', message: `Nobody matching "${searchInput}" is in today's schedule.` }
+        emptyState = { title: 'No races found', message: `Nobody matching "${nameLabel}" is in today's schedule.` }
       }
     } else {
       emptyState = { title: 'No races in the schedule yet', message: 'Check back once the schedule is published.' }
@@ -244,7 +255,7 @@ function RegattaDashboardForId({ regattaId }) {
           onRefresh={refresh}
         />
         <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-100/95 p-3 backdrop-blur">
-          <SearchBar value={searchInput} onChange={handleSearchChange} />
+          <SearchBar value={searchInput} onChange={setSearchInput} />
           <DayToggle days={availableDays} activeDay={activeDay} onChange={setSelectedDay} />
           <button
             type="button"
@@ -265,14 +276,17 @@ function RegattaDashboardForId({ regattaId }) {
           </button>
           {filtersExpanded && (
             <>
+              <AthleteFilterChips athletes={selectedAthletes} onRemove={handleRemoveAthlete} />
               <ClubFilterChips clubs={clubs} selectedClubs={selectedClubs} onToggle={toggleClub} />
               <ClubLegend clubs={clubs} />
               <FilterChips mode={filterMode} onChange={setFilterMode} counts={counts} />
+              {/* Gated on the live (undebounced) searchInput, not debouncedQuery,
+                  so selecting a candidate clears the box in the same render —
+                  waiting for the 150ms debounce to catch up would leave the
+                  dropdown visibly lingering after a chip is already added. */}
               <DisambiguationPrompt
-                candidates={disambiguationCandidates}
-                selectedIdentity={selectedIdentity}
-                onSelect={setSelectedIdentity}
-                onClear={() => setSelectedIdentity(null)}
+                candidates={searchInput.trim() ? disambiguationCandidates : []}
+                onSelect={handleSelectAthlete}
               />
             </>
           )}

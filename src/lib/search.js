@@ -178,25 +178,39 @@ export function findDisambiguationCandidates(index, query) {
 }
 
 /** Annotates each race entry (and its lanes) with whether it matches the
- * current filters, for filtering + highlighting. Name (free-text query or a
- * disambiguated identity) and club (chip selection) are independent
- * dimensions: with both active they must both match (intersect); with only
- * one active, that one alone decides. */
-export function annotateEntries(entries, { query, selectedIdentity, matchedNameSet, selectedClubs }) {
-  const hasNameFilter = !!selectedIdentity || (query ?? '').trim() !== ''
+ * current filters, for filtering + highlighting.
+ *
+ * `selectedAthletes` (chips confirmed via the search dropdown) and the club
+ * chip filter are additive facets, combined with OR: a lane matches if it
+ * belongs to any selected athlete OR a selected club, so a parent with two
+ * kids at two different clubs can see "both my kids' races" unioned with
+ * "my whole club's races" in one view — narrowing via AND would only ever
+ * shrink that union, which isn't what a chip-based multi-select is for.
+ *
+ * The in-progress free-text query (not yet resolved to a chip) still
+ * intersects with an active club filter when no athlete is selected yet,
+ * same as before: that combination is for narrowing a still-ambiguous name
+ * down to one club (e.g. "Zach" + ORCC), not for broadening an already
+ * confirmed selection. Once at least one athlete chip exists, the whole
+ * query/athlete/club combination switches to OR, per the additive model above.
+ */
+export function annotateEntries(entries, { query, selectedAthletes, matchedNameSet, selectedClubs }) {
+  const athletes = selectedAthletes ?? []
+  const hasQueryFilter = (query ?? '').trim() !== ''
+  const hasAthleteFilter = athletes.length > 0
   const hasClubFilter = !!selectedClubs && selectedClubs.size > 0
 
   return entries.map((entry) => {
     if (entry.type !== 'race') return entry
     const lanes = entry.lanes.map((lane) => {
-      const nameMatched = selectedIdentity
-        ? laneMatchesIdentity(lane, selectedIdentity)
-        : laneMatchesQuery(lane, query, matchedNameSet)
+      const queryMatched = hasQueryFilter && laneMatchesQuery(lane, query, matchedNameSet)
+      const athleteMatched = hasAthleteFilter && athletes.some((identity) => laneMatchesIdentity(lane, identity))
       const clubMatched = laneMatchesClubs(lane, selectedClubs)
 
       let matched = false
-      if (hasNameFilter && hasClubFilter) matched = nameMatched && clubMatched
-      else if (hasNameFilter) matched = nameMatched
+      if (hasAthleteFilter) matched = athleteMatched || queryMatched || clubMatched
+      else if (hasQueryFilter && hasClubFilter) matched = queryMatched && clubMatched
+      else if (hasQueryFilter) matched = queryMatched
       else if (hasClubFilter) matched = clubMatched
 
       return { ...lane, matched }

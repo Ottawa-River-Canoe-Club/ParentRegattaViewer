@@ -151,7 +151,7 @@ describe('annotateEntries', () => {
   it('marks races and lanes as matched based on the active query', () => {
     const { entries, index } = setup()
     const matchedNameSet = getMatchedNameSet(index, 'Ben Cooper')
-    const annotated = annotateEntries(entries, { query: 'Ben Cooper', selectedIdentity: null, matchedNameSet })
+    const annotated = annotateEntries(entries, { query: 'Ben Cooper', selectedAthletes: [], matchedNameSet })
 
     const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2)
     const race3 = annotated.find((e) => e.type === 'race' && e.raceNumber === 3)
@@ -166,7 +166,7 @@ describe('annotateEntries', () => {
     const { entries } = setup()
     const annotated = annotateEntries(entries, {
       query: '',
-      selectedIdentity: null,
+      selectedAthletes: [],
       matchedNameSet: new Set(),
       selectedClubs: new Set(['NBCC']),
     })
@@ -184,7 +184,7 @@ describe('annotateEntries', () => {
     // Ben Cooper's boats (races 2 and 3) are all ORCC or ORCC/CPCC — never NBCC.
     const annotated = annotateEntries(entries, {
       query: 'Ben Cooper',
-      selectedIdentity: null,
+      selectedAthletes: [],
       matchedNameSet,
       selectedClubs: new Set(['NBCC']),
     })
@@ -201,7 +201,7 @@ describe('annotateEntries', () => {
     const matchedNameSet = getMatchedNameSet(index, 'Zach')
     const annotated = annotateEntries(entries, {
       query: 'Zach',
-      selectedIdentity: null,
+      selectedAthletes: [],
       matchedNameSet,
       selectedClubs: new Set(['ORCC']),
     })
@@ -210,5 +210,62 @@ describe('annotateEntries', () => {
     const zachLane = race1.lanes.find((l) => l.names.includes('Zach Miller'))
     expect(zachLane.matched).toBe(true)
     expect(race1.matched).toBe(true)
+  })
+
+  describe('multi-athlete chip filtering', () => {
+    it('matches a race containing a selected athlete even with no query or club filter active', () => {
+      const { entries } = setup()
+      const annotated = annotateEntries(entries, {
+        query: '',
+        selectedAthletes: [{ name: 'Ben Cooper', club: 'ORCC' }],
+        matchedNameSet: new Set(),
+        selectedClubs: new Set(),
+      })
+
+      const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2)
+      const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1)
+      expect(race2.matched).toBe(true)
+      expect(race1.matched).toBe(false)
+    })
+
+    it('unions two selected athletes from different races (a race matches if it has any one of them)', () => {
+      const { entries } = setup()
+      const annotated = annotateEntries(entries, {
+        query: '',
+        selectedAthletes: [
+          { name: 'Ben Cooper', club: 'ORCC' },
+          { name: 'Kenzie Cooper', club: 'NBCC' },
+        ],
+        matchedNameSet: new Set(),
+        selectedClubs: new Set(),
+      })
+
+      const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2) // Ben Cooper
+      const race4 = annotated.find((e) => e.type === 'race' && e.raceNumber === 4) // Kenzie Cooper
+      const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1) // neither
+      expect(race2.matched).toBe(true)
+      expect(race4.matched).toBe(true)
+      expect(race1.matched).toBe(false)
+    })
+
+    it('unions a selected athlete with an unrelated active club filter instead of intersecting', () => {
+      const { entries } = setup()
+      // Ben Cooper never races for NBCC, and Kenzie Cooper (race 4) is the only
+      // NBCC racer — with chips this must be a union (both races show), not an
+      // intersection (which would show neither, as the old AND logic did).
+      const annotated = annotateEntries(entries, {
+        query: '',
+        selectedAthletes: [{ name: 'Ben Cooper', club: 'ORCC' }],
+        matchedNameSet: new Set(),
+        selectedClubs: new Set(['NBCC']),
+      })
+
+      const race2 = annotated.find((e) => e.type === 'race' && e.raceNumber === 2) // Ben Cooper (ORCC)
+      const race4 = annotated.find((e) => e.type === 'race' && e.raceNumber === 4) // Kenzie Cooper (NBCC)
+      const race1 = annotated.find((e) => e.type === 'race' && e.raceNumber === 1) // neither
+      expect(race2.matched).toBe(true)
+      expect(race4.matched).toBe(true)
+      expect(race1.matched).toBe(false)
+    })
   })
 })
