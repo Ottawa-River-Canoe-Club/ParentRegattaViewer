@@ -5,7 +5,7 @@ import { useRegattaMeta } from '../hooks/useRegattaMeta'
 import { useRegattaData } from '../hooks/useRegattaData'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { buildSearchIndex, getMatchedNameSet, findDisambiguationCandidates, annotateEntries } from '../lib/search'
-import { findCurrentRaceNumber } from '../lib/currentRace'
+import { findLastCompletedRaceNumber } from '../lib/lastCompletedRace'
 import { buildOverallRankings } from '../lib/rankings'
 import { isWithinRegattaWindow } from '../lib/regattaWindow'
 import { StatusHeader } from '../components/StatusHeader'
@@ -46,8 +46,7 @@ function RegattaDashboardForId({ regattaId }) {
   const [selectedDay, setSelectedDay] = useState(null)
   const debouncedQuery = useDebouncedValue(searchInput, 150)
   const wasFilterEmptyRef = useRef(true)
-  const stickyHeaderRef = useRef(null)
-  const hasScrolledToActiveRaceRef = useRef(false)
+  const hasScrolledOnLoadRef = useRef(false)
   const pendingScrollRaceRef = useRef(null)
   // Captures whatever `data` is on the very first render — null if there was
   // no cache, or the cached snapshot if there was. Comparing against this by
@@ -94,13 +93,14 @@ function RegattaDashboardForId({ regattaId }) {
     wasFilterEmptyRef.current = isEmpty
   }, [hasActiveFilter, filterMode])
 
-  // Jump straight to the active race on first load instead of leaving the
-  // parent to scroll past everything already finished. Runs exactly once —
-  // guarded by a ref rather than state so it can't re-fire and fight a
-  // parent who has since scrolled away on their own. Only figures out
-  // *what* to scroll to and switches to its day if needed; the actual DOM
-  // lookup happens in the effect below, since a day switch re-renders the
-  // list before the target's card exists to scroll to.
+  // Jump straight to the most recently completed race on first load, so a
+  // parent following along live doesn't have to scroll down through
+  // everything that's already happened. Runs exactly once — guarded by a ref
+  // rather than state so it can't re-fire and fight a parent who has since
+  // scrolled away on their own. Only figures out *what* to scroll to and
+  // switches to its day if needed; the actual DOM lookup happens in the
+  // effect below, since a day switch re-renders the list before the target's
+  // card exists to scroll to.
   //
   // Gated on the regatta's own start/end dates rather than on race
   // completion: a regatta can skip races to weather with no result ever
@@ -109,7 +109,7 @@ function RegattaDashboardForId({ regattaId }) {
   // gate runs first — outside its active window this effect does nothing
   // at all, so the page simply opens at the top of Day 1.
   useEffect(() => {
-    if (hasScrolledToActiveRaceRef.current || isLoading || !data) return
+    if (hasScrolledOnLoadRef.current || isLoading || !data) return
     // A cached regatta loads with isLoading already false, before the
     // background refetch this hook always kicks off has actually resolved —
     // acting on that stale snapshot could point at yesterday's target race
@@ -118,11 +118,11 @@ function RegattaDashboardForId({ regattaId }) {
     // has confirmed it failed, in which case there's nothing better coming
     // and the stale cache is still more useful than not scrolling at all.
     if (data === initialDataRef.current && !error) return
-    hasScrolledToActiveRaceRef.current = true
+    hasScrolledOnLoadRef.current = true
 
     if (!isWithinRegattaWindow(regatta)) return
 
-    const targetRaceNumber = findCurrentRaceNumber(data.entries)
+    const targetRaceNumber = findLastCompletedRaceNumber(data.entries)
     if (targetRaceNumber == null) return
 
     const targetRace = data.entries.find((e) => e.type === 'race' && e.raceNumber === targetRaceNumber)
@@ -141,12 +141,10 @@ function RegattaDashboardForId({ regattaId }) {
     if (!element) return
 
     pendingScrollRaceRef.current = null
-    element.scrollIntoView({ behavior: 'auto', block: 'start' })
-    // The header is sticky, not static, so block: 'start' alone would land
-    // the card right underneath it; pull back up by however tall the header
-    // actually rendered (search bar + filters expanded or not).
-    const headerHeight = stickyHeaderRef.current?.offsetHeight ?? 0
-    if (headerHeight) window.scrollBy(0, -headerHeight)
+    // Centering (rather than aligning to the top) means landing here never
+    // depends on the sticky header's height — a card centered in the
+    // viewport is never underneath a header docked at the very top.
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
   })
 
   const entries = data?.entries ?? null
@@ -246,7 +244,7 @@ function RegattaDashboardForId({ regattaId }) {
 
   return (
     <div className="min-h-svh bg-slate-100 pb-10">
-      <div ref={stickyHeaderRef} className="sticky top-0 z-20 shadow-md">
+      <div className="sticky top-0 z-20 shadow-md">
         <StatusHeader
           title={regatta?.name || data?.title}
           lastUpdated={lastUpdated}
